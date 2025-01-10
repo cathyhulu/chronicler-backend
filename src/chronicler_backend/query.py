@@ -28,9 +28,6 @@ def get_authors(root) -> typing.List[Author]:
 
 
 @strawberry.type
-class Query:
+class MyQuery:
     authors: typing.List[Author] = strawberry.field(resolver=get_authors)
     books: typing.List[Book] = strawberry.field(resolver=get_books_for_author)
-
-
-schema = strawberry.Schema(query=Query)

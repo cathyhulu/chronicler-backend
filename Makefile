@@ -1,7 +1,5 @@
 .PHONY: clean
 
-PYTHON_INTERPRETER=python3
-
 SOURCE_DIR=./src
 SOURCE_PATH=./src/chronicler-backend
 TESTS_DIR=./tests
@@ -41,17 +39,20 @@ pylint:
 
 format: isort black flake8 pylint
 
-# +++++++ +++++++ +++++++
-# Local development setup
-# +++++++ +++++++ +++++++
+# ++++++++++++++++++++++++
+# Local development
+# ++++++++++++++++++++++++
 setup-local-dev:
 	uv venv
 	uv pip install -e .[dev,test]
 	uv run pre-commit install
 
-# +++++++ +++++++ +++++++
+run-local-server:
+	uv run uvicorn src.chronicler_backend.main:app --reload
+
+# ++++++++++++++++++++++++
 # Unit testing
-# +++++++ +++++++ +++++++
+# ++++++++++++++++++++++++
 define run_tests
 	uv run pytest $1 \
 	--cov-report term-missing --durations=5

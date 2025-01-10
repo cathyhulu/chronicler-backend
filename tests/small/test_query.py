@@ -1,7 +1,7 @@
-from chronicler_backend.schema import schema
+import strawberry
 
 
-def test_query():
+def test_query(schema_fixture: strawberry.Schema):
     query = """
             query {
             books {
@@ -14,7 +14,7 @@ def test_query():
             }
     """
 
-    result = schema.execute_sync(
+    result = schema_fixture.execute_sync(
         query,
         variable_values={"title": "The Great Gatsby"},
     )
