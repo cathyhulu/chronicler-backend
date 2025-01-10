@@ -1,0 +1,5 @@
+[flake8]
+ignore = E266, D203, H306, W503, E712, W605
+exclude = .git,.venv,notebooks
+max-complexity = 10
+max_line_length = 100
