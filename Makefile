@@ -47,7 +47,7 @@ setup-local-dev:
 	uv pip install -e .[dev,test]
 	uv run pre-commit install
 
-run-local-server:
+start-local-server:
 	uv run uvicorn src.chronicler_backend.main:app --reload
 
 # ++++++++++++++++++++++++
