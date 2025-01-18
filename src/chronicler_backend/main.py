@@ -12,10 +12,10 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Allow only frontend URL
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],  # Specify allowed methods
-    allow_headers=["Content-Type", "Authorization"],  # Specify allowed headers
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 app.include_router(graphql_app, prefix="/graphql")
