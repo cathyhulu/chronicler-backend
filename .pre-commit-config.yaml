@@ -13,7 +13,7 @@ repos:
       - id: small-tests
         name: small-tests
         description: Small-sized tests
-        entry: bash -c "source .venv/bin/activate && export PYTHONPATH=./src && make test-small"
+        entry: bash -c "source .venv/bin/activate && make test-small"
         language: python
         pass_filenames: false
         always_run: true
