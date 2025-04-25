@@ -1,16 +1,18 @@
 [project]
 name = "chronicler-backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "Chronicler Backend with Neo4j integration"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "strawberry-graphql[debug-server,fastapi]>=0.257.0",
+    "neo4j>=5.13.0",
+    "python-dotenv>=1.0.0",
 ]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["chronicler_backend"]
+packages = {find = {where = ["src"], include = ["chronicler_backend*"]}}
 
 [project.optional-dependencies]
 dev = [
