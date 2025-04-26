@@ -41,6 +41,7 @@ clean:
 	find . -type d -name ".pytest_cache" -exec rm -rf {} +
 	find . -type d -name ".ipynb_checkpoints" -exec rm -rf {} +
 	find . -type d -name "*.egg-info" -exec rm -rf {} +
+	find . -type f -name ".coverage*" -exec rm -f {} +
 
 # Clean Neo4j database data with confirmation
 clean-data:
