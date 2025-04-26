@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends
-from neo4j import GraphDatabase, Driver, Session, Result
+from neo4j import Driver, GraphDatabase, Result, Session
 
 
 class Neo4jDatabase:
@@ -32,18 +32,25 @@ class Neo4jDatabase:
         """
         return self.driver.session()
 
-    def run_query(self, query: str, parameters: Optional[Dict[str, Any]] = None) -> Result:
-        """Run a Cypher query.
+    def run_query(self, query, params=None, return_single=False):
+        """Execute a Cypher query and return results.
 
         Args:
-            query: Cypher query
-            parameters: Query parameters
+            query (str): Cypher query
+            params (dict, optional): Query parameters
+            return_single (bool, optional): If True, returns the single record as a dict
 
         Returns:
-            Result: Query result
+            Result object or dict: Neo4j result or single record as dict
         """
         with self.get_session() as session:
-            return session.run(query, parameters or {})
+            result = session.run(query, params or {})
+            if return_single:
+                record = result.single()
+                if record:
+                    return dict(record)
+                return None
+            return result
 
     def get_all_nodes(self, label: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get all nodes with an optional label.
@@ -55,8 +62,9 @@ class Neo4jDatabase:
             List[Dict[str, Any]]: List of nodes
         """
         query = f"MATCH (n{':' + label if label else ''}) RETURN n"
-        records = self.run_query(query)
-        return [record["n"] for record in records]
+        with self.get_session() as session:
+            records = session.run(query)
+            return [dict(record)["n"] for record in records]
 
 
 # Create a database instance

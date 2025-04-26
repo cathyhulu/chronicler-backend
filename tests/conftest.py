@@ -2,26 +2,35 @@
 These fixtures are shared among all tests.
 """
 
+import logging
 import os
+import time
+from typing import Generator
+
 import pytest
 from neo4j import GraphDatabase
+from neo4j.exceptions import ServiceUnavailable
 
 from chronicler_backend.db.neo4j import Neo4jDatabase
 
+logger = logging.getLogger(__name__)
+
 
 @pytest.fixture(scope="module")
-def neo4j_uri():
-    """Get Neo4j URI for testing.
+def neo4j_uri() -> str:
+    """Get Neo4j URI for testing with proper host resolution.
 
     Returns:
         str: Neo4j URI
     """
-    # Use test container URI if available
-    return os.getenv("NEO4J_TEST_URI", "bolt://localhost:7688")
+    # Get test URI from environment variable with default that matches docker-compose.yml
+    uri = os.getenv("NEO4J_TEST_URI", "bolt://neo4j-test:7687")
+    logger.debug(f"Using Neo4j test URI: {uri}")
+    return uri
 
 
 @pytest.fixture(scope="module")
-def neo4j_auth():
+def neo4j_auth() -> tuple[str, str]:
     """Get Neo4j authentication for testing.
 
     Returns:
@@ -30,11 +39,12 @@ def neo4j_auth():
     # Use test container auth if available
     user = os.getenv("NEO4J_TEST_USER", "neo4j")
     password = os.getenv("NEO4J_TEST_PASSWORD", "test")
+    logger.debug(f"Using Neo4j test auth: ({user}, {'*' * len(password)})")
     return user, password
 
 
 @pytest.fixture(scope="module")
-def neo4j_db(neo4j_uri, neo4j_auth):
+def neo4j_db(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Generator[Neo4jDatabase, None, None]:
     """Create and return a Neo4j database instance for testing.
 
     Args:
@@ -47,9 +57,21 @@ def neo4j_db(neo4j_uri, neo4j_auth):
     user, password = neo4j_auth
     db = Neo4jDatabase(uri=neo4j_uri, user=user, password=password)
 
-    # Clear database before tests
-    with db.get_session() as session:
-        session.run("MATCH (n) DETACH DELETE n")
+    try:
+        # Test the connection and clear database before tests
+        with db.get_session() as session:
+            session.run("MATCH (n) DETACH DELETE n")
+            logger.debug("Connected to Neo4j test database and cleared data")
+    except ServiceUnavailable as e:
+        logger.error(f"Failed to connect to Neo4j: {e}")
+        # Let pytest handle the error
+        raise pytest.skip(f"Neo4j database not available: {e}")
 
     yield db
-    db.close()
+
+    # Close connection after tests
+    try:
+        db.close()
+        logger.debug("Closed Neo4j connection")
+    except Exception as e:
+        logger.warning(f"Error while closing Neo4j connection: {e}")

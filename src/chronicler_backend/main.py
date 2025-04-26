@@ -1,12 +1,13 @@
 """Main FastAPI application for the Chronicler backend."""
 
 import os
-from fastapi import FastAPI, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, List, Any
-import strawberry
-from strawberry.fastapi import GraphQLRouter
 from contextlib import asynccontextmanager
+from typing import Any, Dict, List
+
+import strawberry
+from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from strawberry.fastapi import GraphQLRouter
 
 from chronicler_backend.db.neo4j import Neo4jDatabase, get_db
 from chronicler_backend.graphql.schema import schema

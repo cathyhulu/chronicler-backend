@@ -28,7 +28,7 @@ services:
       - "${NEO4J_TEST_PORT:-7475}:7474"
       - "${NEO4J_TEST_BOLT_PORT:-7688}:7687"
     environment:
-      - NEO4J_AUTH=neo4j/${NEO4J_TEST_PASSWORD:-test}
+      - NEO4J_AUTH=${NEO4J_TEST_USER:-neo4j}/${NEO4J_TEST_PASSWORD:-test}
       - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
     tmpfs:
       - /data

@@ -3,18 +3,20 @@
 
 def test_connection(neo4j_db):
     """Test Neo4j connection."""
-    result = neo4j_db.run_query("RETURN 1 AS one")
-    record = result.single()
-    assert record["one"] == 1
+    # Use return_single parameter to get the result directly
+    result = neo4j_db.run_query("RETURN 1 AS one", return_single=True)
+    assert result["one"] == 1
 
 
 def test_create_and_retrieve_nodes(neo4j_db):
     """Test creating and retrieving nodes."""
-    # Create a test node
+    # Create a test node with return_single parameter
     result = neo4j_db.run_query(
-        "CREATE (p:Person {name: $name, age: $age}) RETURN p", {"name": "Alice", "age": 30}
+        "CREATE (p:Person {name: $name, age: $age}) RETURN p",
+        {"name": "Alice", "age": 30},
+        return_single=True,
     )
-    created_node = result.single()["p"]
+    created_node = result["p"]
 
     # Retrieve nodes with the Person label
     nodes = neo4j_db.get_all_nodes("Person")

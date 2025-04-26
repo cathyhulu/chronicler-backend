@@ -1,8 +1,9 @@
 """GraphQL schema for the Chronicler backend."""
 
-import strawberry
-from typing import List, Optional
 from datetime import datetime
+from typing import List, Optional
+
+import strawberry
 
 from chronicler_backend.db.neo4j import Neo4jDatabase
 
