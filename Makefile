@@ -107,6 +107,18 @@ setup-dev: scripts-executable
 	@echo "Neo4j Browser available at: http://localhost:7474"
 
 # ++++++++++++++++++++++++
+# Local development option
+# ++++++++++++++++++++++++
+setup-local-dev:
+	@echo "Setting up local development environment..."
+	uv venv
+	uv pip install -e .[dev,test]
+	uv run pre-commit install
+	@echo "Local development environment ready!"
+	@echo "Note: You'll still need Neo4j running for database operations"
+	@echo "Consider 'make neo4j-only' for just the Neo4j service if needed"
+
+# ++++++++++++++++++++++++
 # Docker Compose Commands
 # ++++++++++++++++++++++++
 # Add podman-check target to handle Podman machine initialization
@@ -122,6 +134,12 @@ ifeq "$(DOCKER_CMD)" "podman"
 		echo "Podman machine is already running"; \
 	fi
 endif
+
+# For running just Neo4j without the full stack
+neo4j-only: podman-check
+	$(COMPOSE_CMD) up -d neo4j neo4j-test
+	@echo "Neo4j services started"
+	@echo "Neo4j Browser available at: http://localhost:7474"
 
 # Start all services with Docker Compose
 docker-up: podman-check

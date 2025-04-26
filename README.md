@@ -9,7 +9,7 @@ A GraphQL API for [chronicler](https://github.com/cathyhulu/chronicler) with Neo
 - [Docker](https://docs.docker.com/get-docker/) or [Podman](https://podman.io/docs/installation)
 - [Git](https://git-scm.com/downloads)
 
-### Quick Setup
+### Setup
 
 1. Clone the repository:
    ```bash
@@ -32,9 +32,36 @@ A GraphQL API for [chronicler](https://github.com/cathyhulu/chronicler) with Neo
    - GraphiQL interface: http://localhost:8000/graphql
    - Neo4j Browser: http://localhost:7474 (Define username and password `.env`)
 
+## Alternative: Local Development
+
+For a simpler development workflow (especially for IDE integration)
+
+1) Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+2) Run `make setup-local-dev` to create a venv and install dependencies
+
 ## Development Workflow
 
-### Starting and Stopping Services
+This project supports two development approaches: container-based (recommended) and local development. Choose the one that best fits your needs.
+
+### Container-Based Development (Recommended)
+
+The containerized approach ensures consistent environments and includes all dependencies (including Neo4j).
+
+```bash
+# Start all services
+make docker-up
+
+# Run linting in the container
+make format
+
+# Run tests in the container
+make test-small
+
+# Access container shell
+make docker-shell
+```
+
+#### Container Management
 
 - Start all services: `make docker-up`
 - Stop all services: `make docker-down`
@@ -44,9 +71,7 @@ A GraphQL API for [chronicler](https://github.com/cathyhulu/chronicler) with Neo
 - Clean unused resources: `make docker-clean`
 - Deep clean all resources: `make docker-deep-clean`
 
-### Code Quality
-
-All code quality tools run inside the Docker container:
+#### Code Quality (Container-Based)
 
 - Format all code: `make format`
 - Run isort: `make isort`
@@ -54,14 +79,43 @@ All code quality tools run inside the Docker container:
 - Run flake8: `make flake8`
 - Run pylint: `make pylint`
 
-### Testing
+#### Testing (Container-Based)
 
-Tests run inside the Docker container with access to a dedicated Neo4j test instance:
+- Run all tests: `make test-all`
+- Run small tests: `make test-small`
+- Run medium tests: `make test-medium`
+- Run large tests: `make test-large`
+- Run specific module: `make test-module TEST_PATH=tests/small/test_module.py`
+- Run specific test: `make test-case TEST_PATH=tests/small/test_module.py TEST_CASE="test_function"`
 
-- Run all tests: `make docker-test`
-- Run small tests: `make docker-test-small`
-- Run medium tests: `make docker-test-medium`
-- Run large tests: `make docker-test-large`
+### Local Development (Simpler Option)
+
+For a more straightforward workflow with better IDE integration:
+
+```bash
+# Set up local virtual environment
+make setup-local-dev
+
+# Start just the Neo4j services
+make neo4j-only
+
+# Run linting locally
+uv run black .
+uv run isort .
+uv run flake8
+uv run pylint **/*.py
+
+# Run tests locally
+PYTHONPATH=./src uv run pytest tests/small
+```
+
+This approach provides:
+- Faster development cycles
+- Simpler IDE integration (code navigation, autocomplete)
+- Native execution of pre-commit hooks
+- Local control of Python tooling
+
+**Note:** You'll still need Neo4j running for database operations. Use `make neo4j-only` to start just the database containers.
 
 ### Database Access
 
@@ -69,9 +123,28 @@ Tests run inside the Docker container with access to a dedicated Neo4j test inst
 - Connect to Neo4j test shell: `make neo4j-test-shell`
 - Access Neo4j Browser: http://localhost:7474
 
-### Container Access
+### Pre-commit Hooks
 
-- Open a shell in the FastAPI container: `make docker-shell`
+This project uses pre-commit hooks to ensure code quality. For both local and container
+based development, hooks are installed during setup
+
+For container based devs, you can run pre-commit manually with:
+
+```bash
+make pre-commit-run
+```
+
+### IDE Integration
+
+For VS Code users:
+1. Set up local development with `make setup-local-dev`
+2. Point VS Code to your local virtual environment
+3. Use the Neo4j services with `make neo4j-only`
+
+For development container users:
+- Install the "Dev Containers" extension in VS Code
+- Use the "Remote-Containers: Reopen in Container" command
+- Note: This works best with Docker; Podman support is limited
 
 ## Project Structure
 
@@ -79,20 +152,27 @@ Tests run inside the Docker container with access to a dedicated Neo4j test inst
 ./
 ├── src/                           # Source code
 │   └── chronicler_backend/
-│       ├── main.py                # FastAPI application
+│       ├── main.py                # FastAPI application with API endpoints
 │       ├── db/
-│       │   └── neo4j.py           # Neo4j database integration
-│       └── graphql/               # Strawberry GraphQL schema
+│       │   └── neo4j.py           # Neo4j database integration and connection management
+│       └── graphql/
+│           └── schema.py          # Strawberry GraphQL schema with types, queries and mutations
 ├── tests/                         # Tests
-│   ├── small/                     # Small tests
-│   ├── medium/                    # Medium tests
-│   └── large/                     # Large tests
+│   ├── small/                     # Small unit tests
+│   │   └── test_neo4j.py          # Tests for Neo4j database integration
+│   ├── medium/                    # Medium integration tests
+│   ├── large/                     # Large system tests
+│   └── conftest.py                # Pytest fixtures and configuration
+├── scripts/                       # Utility scripts
+│   ├── run-in-container.sh        # Script to run commands in Docker/Podman container
+│   └── precommit-docker-check.sh  # Pre-commit hook to verify container status
+├── logs/                          # Log files (gitignored)
 ├── .env.example                   # Example environment variables
-├── docker-compose.yml             # Docker Compose configuration
+├── docker-compose.yml             # Docker Compose configuration for services
 ├── Dockerfile                     # Dockerfile for FastAPI application
-├── Makefile                       # Makefile with various commands
+├── Makefile                       # Makefile with development commands
 ├── pyproject.toml                 # Project dependencies and configuration
-└── README.md                      # This file
+└── README.md                      # Project documentation
 ```
 
 ## Configuration
