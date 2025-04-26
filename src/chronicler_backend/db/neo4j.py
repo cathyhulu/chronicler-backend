@@ -1,7 +1,7 @@
 """Neo4j database module for the Chronicler backend."""
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 from fastapi import Depends
 from neo4j import GraphDatabase, Session
@@ -68,7 +68,7 @@ class Neo4jDatabase:
 
 
 # Create a database instance
-def get_neo4j_db() -> Neo4jDatabase:
+def get_neo4j_db() -> Generator[Neo4jDatabase, None, None]:
     """Get Neo4j database instance.
 
     Returns:

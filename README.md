@@ -153,13 +153,10 @@ For development container users:
 ├── src/                           # Source code
 │   └── chronicler_backend/
 │       ├── main.py                # FastAPI application with API endpoints
-│       ├── db/
-│       │   └── neo4j.py           # Neo4j database integration and connection management
-│       └── graphql/
-│           └── schema.py          # Strawberry GraphQL schema with types, queries and mutations
+│       ├── db/                    # Neo4j database integration and connection management   
+│       └── graphql/               # Strawberry GraphQL schema with types, queries and mutations      
 ├── tests/                         # Tests
 │   ├── small/                     # Small unit tests
-│   │   └── test_neo4j.py          # Tests for Neo4j database integration
 │   ├── medium/                    # Medium integration tests
 │   ├── large/                     # Large system tests
 │   └── conftest.py                # Pytest fixtures and configuration
