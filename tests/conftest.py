@@ -64,10 +64,17 @@ def neo4j_db(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Generator[Neo4jData
             logger.debug("Connected to Neo4j test database and cleared data")
     except ServiceUnavailable as e:
         logger.error(f"Failed to connect to Neo4j: {e}")
-        # Let pytest handle the error
         raise pytest.skip(f"Neo4j database not available: {e}")
 
     yield db
+
+    # Clear database after tests
+    try:
+        with db.get_session() as session:
+            session.run("MATCH (n) DETACH DELETE n")
+            logger.debug("Cleared Neo4j test data after tests")
+    except Exception as e:
+        logger.warning(f"Failed to clear Neo4j data after tests: {e}")
 
     # Close connection after tests
     try:
