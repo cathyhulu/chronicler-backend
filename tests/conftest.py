@@ -4,11 +4,9 @@ These fixtures are shared among all tests.
 
 import logging
 import os
-import time
 from typing import Generator
 
 import pytest
-from neo4j import GraphDatabase
 from neo4j.exceptions import ServiceUnavailable
 
 from chronicler_backend.db.neo4j import Neo4jDatabase

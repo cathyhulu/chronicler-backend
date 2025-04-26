@@ -4,7 +4,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends
-from neo4j import Driver, GraphDatabase, Result, Session
+from neo4j import GraphDatabase, Session
 
 
 class Neo4jDatabase:

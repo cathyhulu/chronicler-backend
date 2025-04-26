@@ -16,7 +16,10 @@ def test_create_and_retrieve_nodes(neo4j_db):
         {"name": "Alice", "age": 30},
         return_single=True,
     )
-    created_node = result["p"]
+    # Assert that "p" is in the result
+    assert "p" in result
+    assert result["p"]["name"] == "Alice"
+    assert result["p"]["age"] == 30
 
     # Retrieve nodes with the Person label
     nodes = neo4j_db.get_all_nodes("Person")

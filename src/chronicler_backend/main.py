@@ -2,9 +2,7 @@
 
 import os
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List
 
-import strawberry
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
@@ -18,9 +16,17 @@ from chronicler_backend.graphql.schema import schema
 async def lifespan(app: FastAPI):
     # Startup: Add any initialization here
     print("Starting up Chronicler Backend...")
+    # Store the database connection for later cleanup
+    app.state.db = Neo4jDatabase(
+        uri=os.getenv("NEO4J_URI", "bolt://neo4j:7687"),
+        user=os.getenv("NEO4J_USER", "neo4j"),
+        password=os.getenv("NEO4J_PASSWORD", "chroniclerpass"),
+    )
     yield
     # Shutdown: Add any cleanup here
     print("Shutting down Chronicler Backend...")
+    if hasattr(app.state, "db"):
+        app.state.db.close()
 
 
 # Initialize FastAPI app
