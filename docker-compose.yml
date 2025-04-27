@@ -1,0 +1,78 @@
+services:
+  # Neo4j database for development
+  neo4j:
+    image: neo4j:5.17.0
+    container_name: chronicler-neo4j
+    ports:
+      - "${NEO4J_PORT:-7474}:7474"
+      - "${NEO4J_BOLT_PORT:-7687}:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-chroniclerpass}
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+    volumes:
+      - neo4j_data:/data
+    networks:
+      - chronicler-network
+    healthcheck:
+      test: ["CMD", "wget", "-O", "/dev/null", "-q", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Neo4j database for testing
+  neo4j-test:
+    image: neo4j:5.17.0
+    container_name: chronicler-neo4j-test
+    ports:
+      - "${NEO4J_TEST_PORT:-7475}:7474"
+      - "${NEO4J_TEST_BOLT_PORT:-7688}:7687"
+    environment:
+      - NEO4J_AUTH=${NEO4J_TEST_USER:-neo4j}/${NEO4J_TEST_PASSWORD:-test}
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+    tmpfs:
+      - /data
+    networks:
+      - chronicler-network
+    restart: unless-stopped
+
+  # FastAPI backend using UV with Python 3.12
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chronicler-backend
+    ports:
+      - "${FASTAPI_PORT:-8000}:8000"
+    environment:
+      - NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+      - NEO4J_USER=${NEO4J_USER:-neo4j}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-chroniclerpass}
+      - NEO4J_TEST_URI=${NEO4J_TEST_URI:-bolt://neo4j-test:7687}
+      - NEO4J_TEST_USER=${NEO4J_TEST_USER:-neo4j}
+      - NEO4J_TEST_PASSWORD=${NEO4J_TEST_PASSWORD:-test}
+      - FASTAPI_HOST=${FASTAPI_HOST:-0.0.0.0}
+      - FASTAPI_PORT=${FASTAPI_PORT:-8000}
+      - FASTAPI_RELOAD=${FASTAPI_RELOAD:-true}
+      - FASTAPI_DEBUG=${FASTAPI_DEBUG:-true}
+      - ENV=${ENV:-development}
+    volumes:
+      - .:/app
+      - api_packages:/app/.venv
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    networks:
+      - chronicler-network
+    command: ["uvicorn", "src.chronicler_backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    restart: unless-stopped
+
+networks:
+  chronicler-network:
+    driver: bridge
+
+volumes:
+  neo4j_data:
+    driver: local
+  api_packages:
+    driver: local

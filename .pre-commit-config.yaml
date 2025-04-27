@@ -1,20 +1,29 @@
 repos:
   - repo: local
     hooks:
-      - id: linting
-        name: linting
-        description: Run isort black flake8 pylint
-        entry: bash -c "source .venv/bin/activate && make format"
-        language: python
+      - id: check-container-running
+        name: check-container-running
+        description: Check if container is running
+        entry: bash scripts/precommit-docker-check.sh
+        language: system
         pass_filenames: false
         always_run: true
         verbose: true
 
-      - id: small-tests
-        name: small-tests
-        description: Small-sized tests
-        entry: bash -c "source .venv/bin/activate && make test-small"
-        language: python
+      - id: container-linting
+        name: container-linting
+        description: Run code formatting in container
+        entry: bash scripts/run-in-container.sh "uv run isort . && uv run black . && uv run flake8 && uv run pylint **/*.py"
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
+
+      - id: container-small-tests
+        name: container-small-tests
+        description: Run small tests in container
+        entry: bash scripts/run-in-container.sh "uv run pytest tests/small"
+        language: system
         pass_filenames: false
         always_run: true
         verbose: true
