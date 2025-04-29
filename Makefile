@@ -222,14 +222,15 @@ docker-uv-version: podman-check
 define run_tests
 	export PYTHONPATH=${SOURCE_DIR} && \
 	$(DOCKER_CMD) exec -it chronicler-backend /bin/bash -c " \
-		uv run coverage run --source=${SOURCE_DIR} --omit=\"*/tests/*\" \
+		uv run coverage run --data-file=/app/logs/.coverage --source=${SOURCE_DIR} --omit=\"*/tests/*\" \
 		-m pytest -rs -vv --log-level=${PYTEST_LOG_LEVEL} $1" \
 		> logs/pytest_output.log && \
-	make -s clean && \
 	if [ -n "$2" ]; then \
-		$(DOCKER_CMD) exec -it chronicler-backend uv run coverage report --fail-under=$2 -m >> logs/pytest_output.log; \
+		$(DOCKER_CMD) exec -it chronicler-backend uv run coverage report --data-file=/app/logs/.coverage \
+		--fail-under=$2 -m >> logs/pytest_output.log; \
 	else \
-		$(DOCKER_CMD) exec -it chronicler-backend uv run coverage report -m >> logs/pytest_output.log; \
+		$(DOCKER_CMD) exec -it chronicler-backend uv run coverage report --data-file=/app/logs/.coverage \
+		-m >> logs/pytest_output.log; \
 	fi
 endef
 
