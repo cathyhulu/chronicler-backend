@@ -1,37 +1,44 @@
 """GraphQL query types for the Chronicler backend."""
 
+import enum
 from datetime import datetime
-from enum import Enum
 from typing import List, Optional
 
 import strawberry
+from strawberry.types import Info
 
 from chronicler_backend.db.node import NodeDatabase
+from chronicler_backend.models.node import DateRange as ModelDateRange
 from chronicler_backend.models.node import NodeType as ModelNodeType
 
-
-@strawberry.enum
-class NodeType(Enum):
-    """Node type enum with hierarchical ranking for GraphQL."""
-
-    EVENT = "EVENT"
-    BATTLE = "BATTLE"
-    WAR = "WAR"
-    PERIOD = "PERIOD"
-    CITY = "CITY"
-    REGION = "REGION"
-    COUNTRY = "COUNTRY"
-    CONTINENT = "CONTINENT"
-    CIVILIZATION = "CIVILIZATION"
-    ERA = "ERA"
+# Auto-generate NodeType enum for GraphQL from the model definition
+# Create the enum dynamically based on the model's NodeType
+NodeTypeDict = {node_type.name: node_type.name for node_type in ModelNodeType}
+NodeType = strawberry.enum(enum.Enum("NodeType", NodeTypeDict))
 
 
+# Auto-generate DateRange type for GraphQL from the model definition
 @strawberry.type
 class DateRange:
-    """Date range type for GraphQL."""
+    """Date range type for GraphQL, auto-generated from model definition."""
 
+    # Match the fields from ModelDateRange
     start: Optional[datetime] = None
     end: Optional[datetime] = None
+
+    @classmethod
+    def from_model(cls, model_date_range: Optional[ModelDateRange]) -> Optional["DateRange"]:
+        """Create a GraphQL DateRange from model DateRange.
+
+        Args:
+            model_date_range: DateRange model instance
+
+        Returns:
+            Optional[DateRange]: GraphQL DateRange instance or None
+        """
+        if model_date_range is None:
+            return None
+        return cls(start=model_date_range.start, end=model_date_range.end)
 
 
 @strawberry.type
@@ -51,7 +58,7 @@ class Query:
     """Root query type for GraphQL API."""
 
     @strawberry.field
-    def node(self, info, uuid: str) -> Optional[Node]:
+    def node(self, info: Info, uuid: str) -> Optional[Node]:
         """Query to get a node by UUID.
 
         Args:
@@ -72,17 +79,13 @@ class Query:
                 name=node.name,
                 node_type=NodeType[node.node_type.name],
                 description=node.description,
-                date_range=(
-                    DateRange(start=node.date_range.start, end=node.date_range.end)
-                    if node.date_range
-                    else None
-                ),
+                date_range=DateRange.from_model(node.date_range),
                 hierarchy_rank=node.node_type.value,
             )
         return None
 
     @strawberry.field
-    def nodes(self, info, limit: int = 10, offset: int = 0) -> List[Node]:
+    def nodes(self, info: Info, limit: int = 10, offset: int = 0) -> List[Node]:
         """Query to get all nodes with pagination.
 
         Args:
@@ -106,11 +109,7 @@ class Query:
                 name=node.name,
                 node_type=NodeType[node.node_type.name],
                 description=node.description,
-                date_range=(
-                    DateRange(start=node.date_range.start, end=node.date_range.end)
-                    if node.date_range
-                    else None
-                ),
+                date_range=DateRange.from_model(node.date_range),
                 hierarchy_rank=node.node_type.value,
             )
             for node in nodes
@@ -118,7 +117,7 @@ class Query:
 
     @strawberry.field
     def node_neighbors(
-        self, info, uuid: str, same_type_only: bool = True, limit: int = 10, offset: int = 0
+        self, info: Info, uuid: str, same_type_only: bool = True, limit: int = 10, offset: int = 0
     ) -> List[Node]:
         """Query to get neighbors of a node.
 
@@ -146,11 +145,7 @@ class Query:
                 name=node.name,
                 node_type=NodeType[node.node_type.name],
                 description=node.description,
-                date_range=(
-                    DateRange(start=node.date_range.start, end=node.date_range.end)
-                    if node.date_range
-                    else None
-                ),
+                date_range=DateRange.from_model(node.date_range),
                 hierarchy_rank=node.node_type.value,
             )
             for node in neighbors
@@ -159,7 +154,7 @@ class Query:
     @strawberry.field
     def nodes_by_date_range(
         self,
-        info,
+        info: Info,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         node_type: Optional[NodeType] = None,
@@ -202,11 +197,7 @@ class Query:
                 name=node.name,
                 node_type=NodeType[node.node_type.name],
                 description=node.description,
-                date_range=(
-                    DateRange(start=node.date_range.start, end=node.date_range.end)
-                    if node.date_range
-                    else None
-                ),
+                date_range=DateRange.from_model(node.date_range),
                 hierarchy_rank=node.node_type.value,
             )
             for node in nodes
@@ -214,7 +205,7 @@ class Query:
 
     @strawberry.field
     def search_nodes_by_vector(
-        self, info, vector: List[float], limit: int = 10, offset: int = 0
+        self, info: Info, vector: List[float], limit: int = 10, offset: int = 0
     ) -> List[Node]:
         """Search nodes by vector similarity.
 
@@ -239,11 +230,7 @@ class Query:
                 name=node.name,
                 node_type=NodeType[node.node_type.name],
                 description=node.description,
-                date_range=(
-                    DateRange(start=node.date_range.start, end=node.date_range.end)
-                    if node.date_range
-                    else None
-                ),
+                date_range=DateRange.from_model(node.date_range),
                 hierarchy_rank=node.node_type.value,
             )
             for node in nodes

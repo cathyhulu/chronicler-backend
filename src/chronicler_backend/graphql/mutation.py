@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List, Optional
 
 import strawberry
+from strawberry.types import Info
 
 from chronicler_backend.db.node import NodeDatabase
 from chronicler_backend.graphql.query import DateRange, Node, NodeType
@@ -41,7 +42,7 @@ class Mutation:
     """Root mutation type for GraphQL API."""
 
     @strawberry.mutation
-    def create_node(self, info, input: NodeInput) -> Node:
+    def create_node(self, info: Info, input: NodeInput) -> Node:
         """Create a new node.
 
         Args:
@@ -90,16 +91,12 @@ class Mutation:
             name=created_node.name,
             node_type=NodeType[created_node.node_type.name],
             description=created_node.description,
-            date_range=(
-                DateRange(start=created_node.date_range.start, end=created_node.date_range.end)
-                if created_node.date_range
-                else None
-            ),
+            date_range=DateRange.from_model(created_node.date_range),
             hierarchy_rank=created_node.node_type.value,
         )
 
     @strawberry.mutation
-    def update_node(self, info, uuid: str, input: NodeInput) -> Optional[Node]:
+    def update_node(self, info: Info, uuid: str, input: NodeInput) -> Optional[Node]:
         """Update an existing node.
 
         Args:
@@ -147,16 +144,12 @@ class Mutation:
             name=updated_node.name,
             node_type=NodeType[updated_node.node_type.name],
             description=updated_node.description,
-            date_range=(
-                DateRange(start=updated_node.date_range.start, end=updated_node.date_range.end)
-                if updated_node.date_range
-                else None
-            ),
+            date_range=DateRange.from_model(updated_node.date_range),
             hierarchy_rank=updated_node.node_type.value,
         )
 
     @strawberry.mutation
-    def delete_node(self, info, uuid: str) -> bool:
+    def delete_node(self, info: Info, uuid: str) -> bool:
         """Delete a node by UUID.
 
         Args:
@@ -173,7 +166,7 @@ class Mutation:
 
     @strawberry.mutation
     def create_relationship(
-        self, info, from_uuid: str, to_uuid: str, relationship_type: str
+        self, info: Info, from_uuid: str, to_uuid: str, relationship_type: str
     ) -> bool:
         """Create a relationship between two nodes.
 
