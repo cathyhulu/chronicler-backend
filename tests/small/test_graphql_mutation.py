@@ -339,7 +339,7 @@ def test_create_node_invalid_vector_dimension(mocker):
     mocker.patch("chronicler_backend.graphql.mutation.NodeDatabase", return_value=mock_node_db)
 
     # Create test input with an invalid vector dimension
-    invalid_vector = [0.1] * 10  # Should be VECTOR_DIMENSION (1536)
+    invalid_vector = [0.1] * 10  # Should be VECTOR_DIMENSION
     node_input = NodeInput(
         name="Invalid Vector Node",
         node_type=NodeType.EVENT,

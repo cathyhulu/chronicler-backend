@@ -7,6 +7,13 @@ from chronicler_backend.models.node import DateRange, Node, NodeType, Relationsh
 from chronicler_backend.utils.constants import VECTOR_DIMENSION
 
 
+def test_connection(neo4j_db):
+    """Test Neo4j connection."""
+    # Use return_single parameter to get the result directly
+    result = neo4j_db.run_query("RETURN 1 AS one", return_single=True)
+    assert result["one"] == 1
+
+
 def test_node_crud_operations(neo4j_db):
     """Test basic CRUD operations for nodes."""
     # Create a NodeDatabase instance
