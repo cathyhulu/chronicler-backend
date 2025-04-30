@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 from chronicler_backend.db.node import NodeDatabase
 from chronicler_backend.models.node import DateRange, Node, NodeType, RelationshipType
+from chronicler_backend.utils.constants import VECTOR_DIMENSION
 
 
 def test_node_crud_operations(neo4j_db):
@@ -200,3 +201,79 @@ def test_search_by_date_range(neo4j_db):
         # Clean up
         for node in node_db.search_nodes_by_date_range():
             node_db.delete_node(node.uuid)
+
+
+def test_vector_index_and_similarity_search(neo4j_db):
+    """Test vector index setup and similarity search functionality."""
+    # Create a NodeDatabase instance
+    node_db = NodeDatabase(neo4j_db)
+
+    # Set up vector index
+    assert node_db.setup_vector_index() is True
+
+    # Create test nodes with vector embeddings
+    # Node 1 - History node with history-related vector
+    history_node = Node(
+        name="American Civil War",
+        node_type=NodeType.WAR,
+        description="Civil war fought in the United States from 1861 to 1865",
+        date_range=DateRange(start=datetime(1861, 4, 12), end=datetime(1865, 5, 9)),
+        # Simple test vector - mostly 1s in first half, 0s in second half
+        vector_embedding=[1.0] * (VECTOR_DIMENSION // 2) + [0.0] * (VECTOR_DIMENSION // 2),
+    )
+    created_history = node_db.create_node(history_node)
+    assert created_history is not None
+
+    # Node 2 - Similar to Node 1 (high similarity)
+    similar_history_node = Node(
+        name="US Civil War Battle",
+        node_type=NodeType.BATTLE,
+        description="Major battle of the American Civil War",
+        date_range=DateRange(start=datetime(1863, 7, 1), end=datetime(1863, 7, 3)),
+        # Similar vector - mostly 1s in first half, small values in second half
+        vector_embedding=[1.0] * (VECTOR_DIMENSION // 2) + [0.1] * (VECTOR_DIMENSION // 2),
+    )
+    created_similar = node_db.create_node(similar_history_node)
+    assert created_similar is not None
+
+    # Node 3 - Different topic node (low similarity)
+    different_node = Node(
+        name="Scientific Discovery",
+        node_type=NodeType.EVENT,
+        description="Major scientific breakthrough",
+        date_range=DateRange(start=datetime(1945, 1, 1), end=datetime(1945, 12, 31)),
+        # Different vector - 0s in first half, 1s in second half
+        vector_embedding=[0.0] * (VECTOR_DIMENSION // 2) + [1.0] * (VECTOR_DIMENSION // 2),
+    )
+    created_different = node_db.create_node(different_node)
+    assert created_different is not None
+
+    try:
+        # Search with a vector similar to the history nodes
+        query_vector = [0.9] * (VECTOR_DIMENSION // 2) + [0.1] * (VECTOR_DIMENSION // 2)
+        results = node_db.search_nodes_by_vector_similarity(query_vector, limit=3)
+
+        # We should get at least 2 results
+        assert len(results) >= 2
+
+        # Extract names for easier assertions
+        result_names = [node.name for node in results]
+
+        # The most similar nodes should be the history-related ones
+        assert "American Civil War" in result_names
+        assert "US Civil War Battle" in result_names
+
+        # The first result should be one of the history nodes (either the Civil War or Battle)
+        assert results[0].name in ["American Civil War", "US Civil War Battle"]
+
+        # The different node should be last if returned
+        # (may not be returned if more than 3 nodes exist)
+        if "Scientific Discovery" in result_names:
+            last_index = result_names.index("Scientific Discovery")
+            assert last_index == len(result_names) - 1
+
+    finally:
+        # Clean up
+        node_db.delete_node(created_history.uuid)
+        node_db.delete_node(created_similar.uuid)
+        node_db.delete_node(created_different.uuid)

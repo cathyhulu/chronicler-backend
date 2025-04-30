@@ -275,7 +275,10 @@ class NodeDatabase:
     ) -> List[Node]:
         """Search nodes by vector similarity.
 
-        This assumes Neo4j has vector indices set up properly.
+        .. warning::
+            This assumes Neo4j has vector indices set up properly.
+            Requires Neo4j with vector index capabilities,
+            such as Neo4j 5.11+ with the Vector Search Plugin
 
         Args:
             vector: Query vector
@@ -285,8 +288,6 @@ class NodeDatabase:
         Returns:
             List[Node]: List of nodes sorted by similarity
         """
-        # Note: This query requires Neo4j with vector index capabilities
-        # such as Neo4j 5.11+ with the Vector Search Plugin
         query = """
         CALL db.index.vector.queryNodes('node_vector_index', $k, $vector)
         YIELD node, score
@@ -390,28 +391,30 @@ class NodeDatabase:
         Returns:
             bool: True if successful, False otherwise
         """
-        # Check if index exists
-        check_query = """
-        CALL db.indexes() YIELD name, type
-        WHERE name = 'node_vector_index'
-        RETURN count(*) > 0 as exists
-        """
-
         try:
-            result = self.db.run_query(check_query, return_single=True)
-            if result and result.get("exists", False):
+            # Check if index exists using the correct syntax
+            check_query = """
+            SHOW VECTOR INDEXES
+            WHERE name = 'node_vector_index'
+            """
+            result = self.db.run_query(check_query)
+
+            # If results are returned, the index exists
+            if result and len(result) > 0:
                 logger.info("Vector index already exists")
                 return True
 
-            # Create index
+            # Create vector index with IF NOT EXISTS to make it idempotent
             create_query = f"""
-            CALL db.index.vector.createNodeIndex(
-                'node_vector_index',
-                'Node',
-                'vector_embedding',
-                {VECTOR_DIMENSION},
-                'cosine'
-            )
+            CREATE VECTOR INDEX node_vector_index IF NOT EXISTS
+            FOR (n:Node)
+            ON (n.vector_embedding)
+            OPTIONS {{
+                indexConfig: {{
+                    `vector.dimensions`: {VECTOR_DIMENSION},
+                    `vector.similarity_function`: 'cosine'
+                }}
+            }}
             """
 
             self.db.run_query(create_query)
