@@ -9,6 +9,7 @@ from chronicler_backend.graphql.query import NodeType
 from chronicler_backend.models.node import DateRange as ModelDateRange
 from chronicler_backend.models.node import Node as ModelNode
 from chronicler_backend.models.node import NodeType as ModelNodeType
+from chronicler_backend.utils.constants import VECTOR_DIMENSION
 
 
 class MockInfo:
@@ -81,9 +82,7 @@ def test_create_node_with_vector(mocker, mock_uuid):
     # Mock the NodeDatabase instance
     mock_node_db = mocker.MagicMock()
 
-    # Setup test vector - match VECTOR_DIMENSION from constants
-    vector_dimension = 1536
-    test_vector = [0.1] * vector_dimension
+    test_vector = [0.1] * VECTOR_DIMENSION
 
     # Setup the mock to return a node on creation
     created_model_node = ModelNode(
@@ -354,7 +353,7 @@ def test_create_node_invalid_vector_dimension(mocker):
 
     # Verify error message mentions vector dimension
     assert "Vector embedding must have exactly" in str(excinfo.value)
-    assert "1536" in str(excinfo.value)
+    assert f"{VECTOR_DIMENSION}" in str(excinfo.value)
 
     # Verify create_node was not called
     mock_node_db.create_node.assert_not_called()

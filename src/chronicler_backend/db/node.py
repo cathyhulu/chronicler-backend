@@ -390,6 +390,10 @@ class NodeDatabase:
 
         Returns:
             bool: True if successful, False otherwise
+
+        Raises:
+            ValueError: If the existing index dimensions do not match the expected dimensions
+            Exception: If any error occurs during index creation
         """
         try:
             # Check if index exists using the correct syntax
@@ -401,7 +405,21 @@ class NodeDatabase:
 
             # If results are returned, the index exists
             if result and len(result) > 0:
-                logger.info("Vector index already exists")
+                # Check dimensions of existing index
+                existing_index = result[0]
+                if (
+                    "indexConfig" in existing_index
+                    and "vector.dimensions" in existing_index["indexConfig"]
+                ):
+                    existing_dimensions = existing_index["indexConfig"]["vector.dimensions"]
+                    if existing_dimensions != VECTOR_DIMENSION:
+                        error_msg = (
+                            f"Vector index dimension mismatch: Expected {VECTOR_DIMENSION}"
+                            f" but found {existing_dimensions}. Consider redeploying your database."
+                        )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
+                logger.info("Vector index already exists with correct dimensions")
                 return True
 
             # Create vector index with IF NOT EXISTS to make it idempotent

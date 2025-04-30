@@ -10,4 +10,4 @@ from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
 
-VECTOR_DIMENSION = 1536
+VECTOR_DIMENSION = 384

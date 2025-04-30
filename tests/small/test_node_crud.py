@@ -226,7 +226,8 @@ def test_vector_index_and_similarity_search(neo4j_db):
         description="Civil war fought in the United States from 1861 to 1865",
         date_range=DateRange(start=datetime(1861, 4, 12), end=datetime(1865, 5, 9)),
         # Simple test vector - mostly 1s in first half, 0s in second half
-        vector_embedding=[1.0] * (VECTOR_DIMENSION // 2) + [0.0] * (VECTOR_DIMENSION // 2),
+        vector_embedding=[1.0] * (VECTOR_DIMENSION // 2)
+        + [0.0] * (VECTOR_DIMENSION - VECTOR_DIMENSION // 2),
     )
     created_history = node_db.create_node(history_node)
     assert created_history is not None
@@ -238,7 +239,8 @@ def test_vector_index_and_similarity_search(neo4j_db):
         description="Major battle of the American Civil War",
         date_range=DateRange(start=datetime(1863, 7, 1), end=datetime(1863, 7, 3)),
         # Similar vector - mostly 1s in first half, small values in second half
-        vector_embedding=[1.0] * (VECTOR_DIMENSION // 2) + [0.1] * (VECTOR_DIMENSION // 2),
+        vector_embedding=[1.0] * (VECTOR_DIMENSION // 2)
+        + [0.1] * (VECTOR_DIMENSION - VECTOR_DIMENSION // 2),
     )
     created_similar = node_db.create_node(similar_history_node)
     assert created_similar is not None
@@ -250,14 +252,17 @@ def test_vector_index_and_similarity_search(neo4j_db):
         description="Major scientific breakthrough",
         date_range=DateRange(start=datetime(1945, 1, 1), end=datetime(1945, 12, 31)),
         # Different vector - 0s in first half, 1s in second half
-        vector_embedding=[0.0] * (VECTOR_DIMENSION // 2) + [1.0] * (VECTOR_DIMENSION // 2),
+        vector_embedding=[0.0] * (VECTOR_DIMENSION // 2)
+        + [1.0] * (VECTOR_DIMENSION - VECTOR_DIMENSION // 2),
     )
     created_different = node_db.create_node(different_node)
     assert created_different is not None
 
     try:
         # Search with a vector similar to the history nodes
-        query_vector = [0.9] * (VECTOR_DIMENSION // 2) + [0.1] * (VECTOR_DIMENSION // 2)
+        query_vector = [0.9] * (VECTOR_DIMENSION // 2) + [0.1] * (
+            VECTOR_DIMENSION - VECTOR_DIMENSION // 2
+        )
         results = node_db.search_nodes_by_vector_similarity(query_vector, limit=3)
 
         # We should get at least 2 results
