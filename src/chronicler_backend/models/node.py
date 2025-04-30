@@ -77,15 +77,45 @@ class DateRange(BaseModel):
 
 
 class Node(BaseModel):
-    """Node model for graph entities."""
+    """Node model for graph entities representing historical elements."""
 
-    uuid: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
-    node_type: NodeType
-    description: Optional[str] = None
-    date_range: Optional[DateRange] = None
-    vector_embedding: Optional[List[float]] = None
-    properties: Optional[Dict] = Field(default_factory=dict)
+    uuid: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Unique identifier for the historical entity",
+    )
+    name: str = Field(
+        ...,
+        description=(
+            "Historical name or title of the entity (e.g., 'Battle of Waterloo', 'Roman Empire')"
+        ),
+    )
+    node_type: NodeType = Field(
+        ...,
+        description=(
+            "Classification of the historical entity "
+            "(e.g., EVENT, WAR, COUNTRY, ERA) with hierarchical importance"
+        ),
+    )
+    description: Optional[str] = Field(
+        None, description="Historical description and significance of the entity"
+    )
+    date_range: Optional[DateRange] = Field(
+        None, description="Temporal period during which the historical entity existed or occurred"
+    )
+    vector_embedding: Optional[List[float]] = Field(
+        None,
+        description=(
+            "Vector representation for semantic search and similarity "
+            "between historical entities"
+        ),
+    )
+    properties: Optional[Dict] = Field(
+        default_factory=dict,
+        description=(
+            "Flexible key-value pairs for storing node-type specific attributes"
+            " that don't fit into standard fields"
+        ),
+    )
 
     model_config = ConfigDict(use_enum_values=False)
 
