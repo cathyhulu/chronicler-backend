@@ -6,6 +6,7 @@ providing efficient embedding generation with multi-worker support.
 from pathlib import Path
 from typing import List, Optional
 
+from fastapi import BackgroundTasks, Depends
 from sentence_transformers import (
     SentenceTransformer,
     export_dynamic_quantized_onnx_model,
@@ -22,9 +23,21 @@ from chronicler_backend.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-class ModelManager:
+class SingletonMeta(type):
+    """Metaclass for implementing the Singleton pattern."""
+
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            logger.info(f"Creating new singleton instance of {cls.__name__}")
+            cls._instances[cls] = super().__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+
+class ModelManager(metaclass=SingletonMeta):
     """
-    Singleton manager for sentence transformer models that supports
+    Manager for sentence transformer models that supports
     efficient memory usage across multiple FastAPI workers.
     """
 
@@ -32,7 +45,11 @@ class ModelManager:
         self._model: Optional[SentenceTransformer] = None
 
     def load_model(
-        self, model_path: Optional[str] = None, quantized: bool = True, backend: str = "onnx"
+        self,
+        model_path: Optional[str] = None,
+        quantized: bool = True,
+        backend: str = "onnx",
+        verbose: bool = True,
     ) -> None:
         """
         Load the sentence transformer model with ONNX backend.
@@ -48,21 +65,38 @@ class ModelManager:
         if model_path is None:
             model_path = str(DEFAULT_QUANTIZED_DIR if quantized else DEFAULT_MODEL_NAME)
 
+        if verbose:
+            logger.info(f"Current working directory: {Path.cwd()}")
+            logger.info(f"Loading model from {model_path} with backend {backend}")
+            logger.info(f"Quantized: {quantized}")
+            logger.info(f"Model path: {model_path}")
+            logger.info(f"Directory contents for {model_path}:")
+
         try:
-            # For ONNX models, we need to specify the file path relative to the model directory
+            for item in Path(model_path).iterdir():
+                logger.info(f"  {item}")
+
             if quantized and backend == "onnx":
-                # Point to the exact ONNX file in the onnx subdirectory
-                model_kwargs = {
-                    "file_name": "onnx/model_quint8_avx2.onnx",
-                    "provider": "CPUExecutionProvider",
-                }
-                self._model = SentenceTransformer(
-                    model_path, backend=backend, model_kwargs=model_kwargs
-                )
-                logger.info(f"Loaded quantized model from {model_path}")
-            else:
-                self._model = SentenceTransformer(model_path, backend=backend)
-                logger.info(f"Loaded standard model ({backend = }) from {model_path}")
+                # Try to find the ONNX model file
+                model_dir = Path(model_path)
+                onnx_files = list(model_dir.glob("**/*.onnx"))
+
+                if onnx_files:
+                    # Use the first ONNX file found
+                    relative_path = onnx_files[0].relative_to(model_dir)
+                    model_kwargs = {
+                        "file_name": str(relative_path),
+                        "provider": "CPUExecutionProvider",
+                    }
+                    self._model = SentenceTransformer(
+                        model_path, backend=backend, model_kwargs=model_kwargs
+                    )
+                else:
+                    # No ONNX files found, fall back to standard model
+                    logger.error(
+                        f"No ONNX model files in {model_path}. Falling back to standard model."
+                    )
+                    self._model = SentenceTransformer(DEFAULT_MODEL_NAME)
         except Exception as e:
             # Log the error and fall back to the non-quantized model
             logger.error(
@@ -166,6 +200,44 @@ def export_quantized_model(
         return output_dir
 
 
-# Create an instance of ModelManager
-# TODO: REMOVE AFTER MIGRATION TO CELERY WORKER
-model_manager = ModelManager()
+# FastAPI dependency to get model manager
+async def get_model_manager() -> ModelManager:
+    """
+    FastAPI dependency for getting the ModelManager instance.
+
+    Returns:
+        ModelManager: Singleton instance of the ModelManager
+    """
+    return ModelManager()
+
+
+# FastAPI background task for loading the model
+def load_model_in_background(
+    background_tasks: BackgroundTasks,
+    model_manager: ModelManager = Depends(get_model_manager),
+    model_path: Optional[str] = None,
+    quantized: bool = True,
+    backend: str = "onnx",
+) -> None:
+    """
+    Schedule model loading as a background task.
+
+    Args:
+        background_tasks: FastAPI BackgroundTasks object
+        model_manager: ModelManager instance
+        model_path: Path to the model
+        quantized: Whether to use a quantized model
+        backend: Backend to use
+    """
+    background_tasks.add_task(
+        model_manager.load_model, model_path=model_path, quantized=quantized, backend=backend
+    )
+
+
+# Function to load model during app startup
+def load_model_on_startup() -> None:
+    """
+    Function to be called during app startup to preload the model.
+    """
+    model_manager = ModelManager()
+    model_manager.load_model()

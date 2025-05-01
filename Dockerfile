@@ -21,7 +21,7 @@ ENV PYTHONPATH="/app:/app/src:${PYTHONPATH}"
 ARG MODEL_DIR=/app/model_weights
 ENV MODEL_DIR=${MODEL_DIR}
 
-RUN echo "Building for environment: ${ENV}"
+RUN echo "Building for environment: [${ENV}]"
 
 RUN uv venv /app/.venv && \
     . /app/.venv/bin/activate && \
@@ -40,7 +40,10 @@ RUN mkdir -p ${MODEL_DIR}
 RUN echo "Downloading model to ${MODEL_DIR}/quantized-model" && \
     . /app/.venv/bin/activate && \
     uv run scripts/download_model.py --output-dir ${MODEL_DIR}/quantized-model \
-    --verbose --force
+    --verbose
+
+# Give permissions to the model directory
+RUN chmod -R 755 ${MODEL_DIR}
 
 # Expose port
 EXPOSE 8000

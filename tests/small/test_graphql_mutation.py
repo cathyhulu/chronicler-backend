@@ -26,10 +26,11 @@ def mock_uuid() -> str:
     return "12345678-1234-5678-1234-567812345678"
 
 
-def test_create_node(mocker, mock_uuid):
+@pytest.mark.asyncio
+async def test_create_node(mocker, mock_uuid):
     """Test create_node mutation."""
     # Mock the NodeDatabase instance
-    mock_node_db = mocker.MagicMock()
+    mock_node_db = mocker.AsyncMock()
 
     # Setup the mock to return a node on creation
     created_model_node = ModelNode(
@@ -61,7 +62,7 @@ def test_create_node(mocker, mock_uuid):
 
     # Execute the mutation
     mutation = Mutation()
-    result = mutation.create_node(mock_info, node_input)
+    result = await mutation.create_node(mock_info, node_input)
 
     # Verify the database was called correctly
     mock_node_db.create_node.assert_called_once()
@@ -78,10 +79,11 @@ def test_create_node(mocker, mock_uuid):
     assert result.date_range.end == datetime(2021, 1, 1)
 
 
-def test_create_node_with_vector(mocker, mock_uuid):
+@pytest.mark.asyncio
+async def test_create_node_with_vector(mocker, mock_uuid):
     """Test create_node mutation with vector embedding."""
     # Mock the NodeDatabase instance
-    mock_node_db = mocker.MagicMock()
+    mock_node_db = mocker.AsyncMock()
 
     test_vector = [0.1] * VECTOR_DIMENSION
 
@@ -112,7 +114,7 @@ def test_create_node_with_vector(mocker, mock_uuid):
 
     # Execute the mutation
     mutation = Mutation()
-    result = mutation.create_node(mock_info, node_input)
+    result = await mutation.create_node(mock_info, node_input)
 
     # Verify the database was called correctly
     mock_node_db.create_node.assert_called_once()
@@ -123,10 +125,12 @@ def test_create_node_with_vector(mocker, mock_uuid):
     assert result.node_type == NodeType.BATTLE
 
 
-def test_update_node(mocker):
+@pytest.mark.asyncio
+async def test_update_node(mocker):
     """Test update_node mutation."""
     # Mock the NodeDatabase instance
     mock_node_db = mocker.MagicMock()
+    mock_node_db.update_node = mocker.AsyncMock()
 
     # Setup the mock to return a node on update
     updated_model_node = ModelNode(
@@ -144,6 +148,7 @@ def test_update_node(mocker):
         name="Original Node",
         node_type=ModelNodeType.EVENT,
         description="Original description",
+        vector_embedding=[0.1] * VECTOR_DIMENSION,
     )
     mock_node_db.get_node.return_value = existing_node
 
@@ -165,7 +170,7 @@ def test_update_node(mocker):
 
     # Execute the mutation
     mutation = Mutation()
-    result = mutation.update_node(mock_info, uuid="existing-uuid", input=node_input)
+    result = await mutation.update_node(mock_info, uuid="existing-uuid", input=node_input)
 
     # Verify the database was called correctly
     mock_node_db.get_node.assert_called_once_with("existing-uuid")
@@ -182,10 +187,12 @@ def test_update_node(mocker):
     assert result.date_range.end == datetime(2022, 1, 1)
 
 
-def test_update_node_not_found(mocker):
+@pytest.mark.asyncio
+async def test_update_node_not_found(mocker):
     """Test update_node when the node doesn't exist."""
     # Mock the NodeDatabase instance
     mock_node_db = mocker.MagicMock()
+    mock_node_db.update_node = mocker.AsyncMock()
 
     # Configure mock to return None (node not found)
     mock_node_db.get_node.return_value = None
@@ -206,7 +213,7 @@ def test_update_node_not_found(mocker):
 
     # Execute the mutation
     mutation = Mutation()
-    result = mutation.update_node(mock_info, uuid="nonexistent-uuid", input=node_input)
+    result = await mutation.update_node(mock_info, uuid="nonexistent-uuid", input=node_input)
 
     # Verify get_node was called but update_node was not
     mock_node_db.get_node.assert_called_once_with("nonexistent-uuid")
@@ -214,6 +221,41 @@ def test_update_node_not_found(mocker):
 
     # Result should be None for non-existent node
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_create_node_invalid_vector_dimension(mocker):
+    """Test create_node mutation with invalid vector dimension."""
+    # Mock the NodeDatabase instance
+    mock_node_db = mocker.AsyncMock()
+
+    # Create mock db and info
+    mock_db = mocker.MagicMock()
+    mock_info = MockInfo(context={"db": mock_db})
+
+    # Mock NodeDatabase constructor
+    mocker.patch("chronicler_backend.graphql.mutation.NodeDatabase", return_value=mock_node_db)
+
+    # Create test input with an invalid vector dimension
+    invalid_vector = [0.1] * 10  # Should be VECTOR_DIMENSION
+    node_input = NodeInput(
+        name="Invalid Vector Node",
+        node_type=NodeType.EVENT,
+        description="Node with invalid vector",
+        vector_embedding=invalid_vector,
+    )
+
+    # Execute the mutation and expect ValueError
+    mutation = Mutation()
+    with pytest.raises(ValueError) as excinfo:
+        await mutation.create_node(mock_info, node_input)
+
+    # Verify error message mentions vector dimension
+    assert "Vector embedding must have exactly" in str(excinfo.value)
+    assert f"{VECTOR_DIMENSION}" in str(excinfo.value)
+
+    # Verify create_node was not called
+    mock_node_db.create_node.assert_not_called()
 
 
 def test_delete_node(mocker):
@@ -336,37 +378,3 @@ def test_create_relationship_failure(mocker):
 
     # Verify result is False (failed to create relationship)
     assert result is False
-
-
-def test_create_node_invalid_vector_dimension(mocker):
-    """Test create_node mutation with invalid vector dimension."""
-    # Mock the NodeDatabase instance
-    mock_node_db = mocker.MagicMock()
-
-    # Create mock db and info
-    mock_db = mocker.MagicMock()
-    mock_info = MockInfo(context={"db": mock_db})
-
-    # Mock NodeDatabase constructor
-    mocker.patch("chronicler_backend.graphql.mutation.NodeDatabase", return_value=mock_node_db)
-
-    # Create test input with an invalid vector dimension
-    invalid_vector = [0.1] * 10  # Should be VECTOR_DIMENSION
-    node_input = NodeInput(
-        name="Invalid Vector Node",
-        node_type=NodeType.EVENT,
-        description="Node with invalid vector",
-        vector_embedding=invalid_vector,
-    )
-
-    # Execute the mutation and expect ValueError
-    mutation = Mutation()
-    with pytest.raises(ValueError) as excinfo:
-        mutation.create_node(mock_info, node_input)
-
-    # Verify error message mentions vector dimension
-    assert "Vector embedding must have exactly" in str(excinfo.value)
-    assert f"{VECTOR_DIMENSION}" in str(excinfo.value)
-
-    # Verify create_node was not called
-    mock_node_db.create_node.assert_not_called()

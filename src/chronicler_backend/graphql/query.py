@@ -8,11 +8,11 @@ import strawberry
 from strawberry.types import Info
 
 from chronicler_backend.db.node import NodeDatabase
+from chronicler_backend.embeddings.api import get_model_manager
 from chronicler_backend.models.node import DateRange as ModelDateRange
 from chronicler_backend.models.node import NodeType as ModelNodeType
 from chronicler_backend.models.node import RelationshipType as ModelRelationshipType
 from chronicler_backend.utils.constants import TRUNCATE_DESCRIPTION_LENGTH
-from chronicler_backend.utils.embeddings import model_manager
 from chronicler_backend.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -353,7 +353,7 @@ class Query:
         ]
 
     @strawberry.field(description="Search nodes by semantic similarity to the given text")
-    def search_nodes_by_text(
+    async def search_nodes_by_text(
         self,
         info: Info,
         search_text: Annotated[
@@ -384,6 +384,9 @@ class Query:
         node_db = NodeDatabase(db)
 
         try:
+            # Get model manager from FastAPI dependency
+            model_manager = await get_model_manager()
+
             # Generate embedding from search text
             vector = model_manager.encode(search_text)
 

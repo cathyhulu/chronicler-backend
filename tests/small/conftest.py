@@ -25,7 +25,7 @@ def mock_generate_vector_embedding(mocker):
     # Mock the actual method on the class itself
     original_method = NodeDatabase._generate_vector_embedding
 
-    def mock_generate_vector(*args, **kwargs):
+    async def mock_generate_vector(*args, **kwargs):
         logger.debug("Using mocked vector embedding generator")
         return default_vector
 

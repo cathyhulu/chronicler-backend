@@ -5,12 +5,13 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from chronicler_backend.db.neo4j import Neo4jDatabase
+from chronicler_backend.embeddings.api import get_model_manager
+from chronicler_backend.embeddings.manager import ModelManager
 from chronicler_backend.models.node import DateRange, Node, NodeType, RelationshipType
 from chronicler_backend.utils.constants import (
     TRUNCATE_DESCRIPTION_LENGTH,
     VECTOR_DIMENSION,
 )
-from chronicler_backend.utils.embeddings import model_manager
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,17 @@ class NodeDatabase:
             db: Neo4j database connection
         """
         self.db = db
+        self._model_manager = None
+
+    async def _get_model_manager(self) -> ModelManager:
+        """Get the ModelManager instance asynchronously.
+
+        Returns:
+            ModelManager: The model manager instance
+        """
+        if self._model_manager is None:
+            self._model_manager = await get_model_manager()
+        return self._model_manager
 
     def _format_date_range_as_string(self, date_range: Optional[DateRange]) -> str:
         """Format a date range as a string for embedding generation.
@@ -67,7 +79,7 @@ class NodeDatabase:
             return f"until {end_fmt}"
         return ""
 
-    def _generate_vector_embedding(self, node: Node) -> Optional[List[float]]:
+    async def _generate_vector_embedding(self, node: Node) -> Optional[List[float]]:
         """Generate a vector embedding for a node based on its properties.
 
         Args:
@@ -77,6 +89,9 @@ class NodeDatabase:
             Optional[List[float]]: Generated vector embedding or None if generation failed
         """
         try:
+            # Get the model manager
+            model_manager = await self._get_model_manager()
+
             # Format date range as string for embedding
             date_str = self._format_date_range_as_string(node.date_range)
 
@@ -100,7 +115,7 @@ class NodeDatabase:
             logger.error(f"Error generating vector embedding: {e}")
             return None
 
-    def create_node(self, node: Node) -> Optional[Node]:
+    async def create_node(self, node: Node) -> Optional[Node]:
         """Create a new node in the database.
 
         Args:
@@ -128,7 +143,7 @@ class NodeDatabase:
 
         # Generate vector embedding if not provided
         if node.vector_embedding is None:
-            node.vector_embedding = self._generate_vector_embedding(node)
+            node.vector_embedding = await self._generate_vector_embedding(node)
 
         # Handle vector embedding as a separate parameter if present
         vector_param = {}
@@ -220,7 +235,7 @@ class NodeDatabase:
             or node.date_range != existing.date_range
         )
 
-    def update_node(self, node: Node) -> Optional[Node]:
+    async def update_node(self, node: Node) -> Optional[Node]:
         """Update an existing node."""
         # Check if node exists
         existing = self.get_node(node.uuid)
@@ -234,7 +249,7 @@ class NodeDatabase:
         # Handle vector embedding
         vector_param = {}
         if node.vector_embedding is None and self._should_update_embedding(node, existing):
-            node.vector_embedding = self._generate_vector_embedding(node)
+            node.vector_embedding = await self._generate_vector_embedding(node)
 
         if node.vector_embedding:
             vector_param = {"vector": node.vector_embedding}

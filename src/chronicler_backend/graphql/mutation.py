@@ -54,7 +54,7 @@ class Mutation:
     """Root mutation type for GraphQL API."""
 
     @strawberry.mutation(description="Create a new node in the knowledge graph")
-    def create_node(
+    async def create_node(
         self,
         info: Info,
         input: Annotated[
@@ -99,7 +99,7 @@ class Mutation:
         )
 
         # Persist to database
-        created_node = node_db.create_node(model_node)
+        created_node = await node_db.create_node(model_node)
         if not created_node:
             raise ValueError("Failed to create node")
 
@@ -114,7 +114,7 @@ class Mutation:
         )
 
     @strawberry.mutation(description="Update an existing node in the knowledge graph")
-    def update_node(
+    async def update_node(
         self,
         info: Info,
         uuid: Annotated[
@@ -148,6 +148,11 @@ class Mutation:
         # Convert GraphQL enum to model enum
         node_type = ModelNodeType[input.node_type.name]
 
+        if input.vector_embedding is not None:
+            vector_embedding = input.vector_embedding
+        else:
+            vector_embedding = existing_node.vector_embedding
+
         # Update the node model with new values
         updated_model = ModelNode(
             uuid=uuid,
@@ -155,11 +160,11 @@ class Mutation:
             node_type=node_type,
             description=input.description,
             date_range=date_range,
-            vector_embedding=input.vector_embedding or existing_node.vector_embedding,
+            vector_embedding=vector_embedding,
         )
 
-        # Persist the update
-        updated_node = node_db.update_node(updated_model)
+        # Persist the update, regenerating the vector embedding if necessary
+        updated_node = await node_db.update_node(updated_model)
         if not updated_node:
             return None
 

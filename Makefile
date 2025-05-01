@@ -119,10 +119,10 @@ setup-local-dev:
 	uv pip install -e .[dev,test]
 	@echo "Installing pre-commit hooks..."
 	uv run pre-commit install
-	make download-model-local
 	@echo "Local development environment ready!"
 	@echo "Note: You'll still need Neo4j running for database operations"
 	@echo "Consider 'make neo4j-only' for just the Neo4j service if needed"
+	@echo "You also may need to download the model locally using 'make download-model-local'"
 
 # ++++++++++++++++++++++++
 # Docker Compose Commands

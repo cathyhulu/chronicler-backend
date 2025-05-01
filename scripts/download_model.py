@@ -7,11 +7,11 @@ import os
 import sys
 from pathlib import Path
 
+from chronicler_backend.embeddings.api import export_quantized_model
 from chronicler_backend.utils.constants import (
     DEFAULT_MODEL_NAME,
     DEFAULT_QUANTIZED_DIR,
 )
-from chronicler_backend.utils.embeddings import export_quantized_model
 from chronicler_backend.utils.logging import get_logger
 
 logger = get_logger(__name__)
