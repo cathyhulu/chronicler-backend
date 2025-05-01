@@ -53,6 +53,7 @@ services:
       dockerfile: Dockerfile
       args:
         - ENV=${ENV:-production}
+        - MODEL_DIR=/app/model_weights
     container_name: chronicler-backend
     ports:
       - "${FASTAPI_PORT:-8000}:8000"
@@ -67,9 +68,6 @@ services:
       - FASTAPI_PORT=${FASTAPI_PORT:-8000}
       - FASTAPI_RELOAD=${FASTAPI_RELOAD:-true}
       - FASTAPI_DEBUG=${FASTAPI_DEBUG:-true}
-      - ENV=${ENV:-production}
-      - MODEL_DIR=/app/model_weights
-      - PYTHONPATH=/app
     volumes:
       - .:/app
       - api_packages:/app/.venv

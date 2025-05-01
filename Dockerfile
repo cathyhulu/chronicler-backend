@@ -18,7 +18,8 @@ COPY . .
 ARG ENV=production
 ENV ENV=${ENV}
 ENV PYTHONPATH="/app:/app/src:${PYTHONPATH}"
-ENV MODEL_DIR="/app/model_weights"
+ARG MODEL_DIR=/app/model_weights
+ENV MODEL_DIR=${MODEL_DIR}
 
 RUN echo "Building for environment: ${ENV}"
 
