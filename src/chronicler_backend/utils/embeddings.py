@@ -3,7 +3,6 @@ Module for managing sentence transformer models with ONNX support,
 providing efficient embedding generation with multi-worker support.
 """
 
-from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional
 
@@ -25,14 +24,6 @@ class ModelManager:
     Singleton manager for sentence transformer models that supports
     efficient memory usage across multiple FastAPI workers.
     """
-
-    _instance = None
-
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(ModelManager, cls).__new__(cls)
-            cls._instance._model = None
-        return cls._instance
 
     def load_model(
         self, model_path: Optional[str] = None, quantized: bool = True, backend: str = "onnx"
@@ -59,11 +50,9 @@ class ModelManager:
             self.load_model()
         return self._model
 
-    @lru_cache(maxsize=1024)
     def encode(self, text: str) -> List[float]:
         """
         Generate embeddings for the given text.
-        Uses lru_cache to avoid recomputing embeddings for the same text.
 
         Args:
             text: Input text to encode
@@ -135,5 +124,6 @@ def export_quantized_model(
     return output_dir
 
 
-# Create a singleton instance
+# Create an instance of ModelManager
+# TODO: REMOVE AFTER MIGRATION TO CELERY WORKER
 model_manager = ModelManager()

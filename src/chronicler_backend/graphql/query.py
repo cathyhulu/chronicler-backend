@@ -2,7 +2,7 @@
 
 import enum
 from datetime import datetime
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 import strawberry
 from strawberry.types import Info
@@ -95,7 +95,9 @@ class Query:
     def node(
         self,
         info: Info,
-        uuid: str,
+        uuid: Annotated[
+            str, strawberry.argument(description="Unique identifier of the node to retrieve")
+        ],
     ) -> Optional[Node]:
         """Query to get a node by UUID.
 
@@ -126,8 +128,12 @@ class Query:
     def nodes(
         self,
         info: Info,
-        limit: int = 10,
-        offset: int = 0,
+        limit: Annotated[
+            int, strawberry.argument(description="Maximum number of nodes to return")
+        ] = 10,
+        offset: Annotated[
+            int, strawberry.argument(description="Number of nodes to skip for pagination")
+        ] = 0,
     ) -> List[Node]:
         """Query to get all nodes with pagination.
 
@@ -162,10 +168,19 @@ class Query:
     def node_neighbors(
         self,
         info: Info,
-        uuid: str,
-        same_type_only: bool = True,
-        limit: int = 10,
-        offset: int = 0,
+        uuid: Annotated[
+            str,
+            strawberry.argument(description="Unique identifier of the node to find neighbors for"),
+        ],
+        same_type_only: Annotated[
+            bool, strawberry.argument(description="Filter to only return nodes of the same type")
+        ] = True,
+        limit: Annotated[
+            int, strawberry.argument(description="Maximum number of nodes to return")
+        ] = 10,
+        offset: Annotated[
+            int, strawberry.argument(description="Number of nodes to skip for pagination")
+        ] = 0,
     ) -> List[Node]:
         """Query to get neighbors of a node.
 
@@ -203,11 +218,21 @@ class Query:
     def nodes_by_date_range(
         self,
         info: Info,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        node_type: Optional[NodeType] = None,
-        limit: int = 10,
-        offset: int = 0,
+        start_date: Annotated[
+            Optional[datetime], strawberry.argument(description="Start date for date range search")
+        ] = None,
+        end_date: Annotated[
+            Optional[datetime], strawberry.argument(description="End date for date range search")
+        ] = None,
+        node_type: Annotated[
+            Optional[NodeType], strawberry.argument(description="Filter results by node type")
+        ] = None,
+        limit: Annotated[
+            int, strawberry.argument(description="Maximum number of nodes to return")
+        ] = 10,
+        offset: Annotated[
+            int, strawberry.argument(description="Number of nodes to skip for pagination")
+        ] = 0,
     ) -> List[Node]:
         """Query nodes by date range.
 
@@ -255,9 +280,15 @@ class Query:
     def search_nodes_by_vector(
         self,
         info: Info,
-        vector: List[float],
-        limit: int = 10,
-        offset: int = 0,
+        vector: Annotated[
+            List[float], strawberry.argument(description="Query vector for similarity search")
+        ],
+        limit: Annotated[
+            int, strawberry.argument(description="Maximum number of nodes to return")
+        ] = 10,
+        offset: Annotated[
+            int, strawberry.argument(description="Number of nodes to skip for pagination")
+        ] = 0,
     ) -> List[Node]:
         """Search nodes by vector similarity.
 
@@ -292,9 +323,15 @@ class Query:
     def search_nodes_by_text(
         self,
         info: Info,
-        search_text: str,
-        limit: int = 10,
-        offset: int = 0,
+        search_text: Annotated[
+            str, strawberry.argument(description="Text to search for semantic similarity")
+        ],
+        limit: Annotated[
+            int, strawberry.argument(description="Maximum number of nodes to return")
+        ] = 10,
+        offset: Annotated[
+            int, strawberry.argument(description="Number of nodes to skip for pagination")
+        ] = 0,
     ) -> List[Node]:
         """Search nodes by semantic similarity to the given text.
 

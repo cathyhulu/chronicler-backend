@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 import strawberry
 from strawberry.types import Info
@@ -56,7 +56,9 @@ class Mutation:
     def create_node(
         self,
         info: Info,
-        input: NodeInput,
+        input: Annotated[
+            NodeInput, strawberry.argument(description="Input data for creating a new node")
+        ],
     ) -> Node:
         """Create a new node.
 
@@ -114,8 +116,10 @@ class Mutation:
     def update_node(
         self,
         info: Info,
-        uuid: str,
-        input: NodeInput,
+        uuid: Annotated[
+            str, strawberry.argument(description="Unique identifier of the node to update")
+        ],
+        input: Annotated[NodeInput, strawberry.argument(description="Updated data for the node")],
     ) -> Optional[Node]:
         """Update an existing node.
 
@@ -172,7 +176,9 @@ class Mutation:
     def delete_node(
         self,
         info: Info,
-        uuid: str,
+        uuid: Annotated[
+            str, strawberry.argument(description="Unique identifier of the node to delete")
+        ],
     ) -> bool:
         """Delete a node by UUID.
 
@@ -194,9 +200,15 @@ class Mutation:
     def create_relationship(
         self,
         info: Info,
-        from_uuid: str,
-        to_uuid: str,
-        relationship_type: str,
+        from_uuid: Annotated[
+            str, strawberry.argument(description="Unique identifier of the source node")
+        ],
+        to_uuid: Annotated[
+            str, strawberry.argument(description="Unique identifier of the target node")
+        ],
+        relationship_type: Annotated[
+            str, strawberry.argument(description="Type of relationship between the nodes")
+        ],
     ) -> bool:
         """Create a relationship between two nodes.
 
