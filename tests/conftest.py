@@ -2,7 +2,6 @@
 These fixtures are shared among all tests.
 """
 
-import logging
 import os
 from typing import Generator
 
@@ -10,8 +9,9 @@ import pytest
 from neo4j.exceptions import ServiceUnavailable
 
 from chronicler_backend.db.neo4j import Neo4jDatabase
+from chronicler_backend.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @pytest.fixture(scope="module")
