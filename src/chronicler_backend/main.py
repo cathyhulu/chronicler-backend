@@ -8,23 +8,45 @@ from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
 
 from chronicler_backend.db.neo4j import Neo4jDatabase, get_db
+from chronicler_backend.db.node import NodeDatabase
 from chronicler_backend.graphql.schema import schema
+from chronicler_backend.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 # Setup startup and shutdown events
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Add any initialization here
-    print("Starting up Chronicler Backend...")
+    logger.info("Starting up Chronicler Backend...")
     # Store the database connection for later cleanup
     app.state.db = Neo4jDatabase(
         uri=os.getenv("NEO4J_URI", "bolt://neo4j:7687"),
         user=os.getenv("NEO4J_USER", "neo4j"),
         password=os.getenv("NEO4J_PASSWORD", "chroniclerpass"),
     )
+
+    # Initialize node database with necessary indexes
+    logger.info("Setting up database indexes...")
+    node_db = NodeDatabase(app.state.db)
+    if node_db.setup_date_range_index():
+        logger.info("Date range indexes set up successfully")
+    else:
+        logger.warning("Failed to set up date range indexes")
+
+    # Set up vector index for similarity search
+    try:
+        if node_db.setup_vector_index():
+            logger.info("Vector index set up successfully")
+        else:
+            logger.warning("Failed to set up vector index")
+    except Exception as e:
+        logger.warning(f"Error setting up vector index: {e}")
+
     yield
     # Shutdown: Add any cleanup here
-    print("Shutting down Chronicler Backend...")
+    logger.info("Shutting down Chronicler Backend...")
     if hasattr(app.state, "db"):
         app.state.db.close()
 

@@ -1,7 +1,7 @@
 """Neo4j database module for the Chronicler backend."""
 
 import os
-from typing import Any, Dict, Generator, List, Optional
+from typing import Generator
 
 from fastapi import Depends
 from neo4j import GraphDatabase, Session
@@ -41,7 +41,7 @@ class Neo4jDatabase:
             return_single (bool, optional): If True, returns the single record as a dict
 
         Returns:
-            Result object or dict: Neo4j result or single record as dict
+            List[Dict] or Dict: List of records or single record as dict
         """
         with self.get_session() as session:
             result = session.run(query, params or {})
@@ -50,21 +50,8 @@ class Neo4jDatabase:
                 if record:
                     return dict(record)
                 return None
-            return result
-
-    def get_all_nodes(self, label: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get all nodes with an optional label.
-
-        Args:
-            label: Node label filter
-
-        Returns:
-            List[Dict[str, Any]]: List of nodes
-        """
-        query = f"MATCH (n{':' + label if label else ''}) RETURN n"
-        with self.get_session() as session:
-            records = session.run(query)
-            return [dict(record)["n"] for record in records]
+            # Collect all records into a list before the session closes
+            return [dict(record) for record in result]
 
 
 # Create a database instance
