@@ -185,7 +185,7 @@ docker-deep-clean: docker-down
 
 # Rebuild all services with Docker Compose
 docker-build: podman-check
-	$(COMPOSE_CMD) build
+	$(COMPOSE_CMD) --progress=plain build
 	@echo "All services rebuilt with Docker Compose"
 
 # Rebuild and restart all services

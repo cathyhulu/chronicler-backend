@@ -10,6 +10,10 @@ from strawberry.types import Info
 from chronicler_backend.db.node import NodeDatabase
 from chronicler_backend.models.node import DateRange as ModelDateRange
 from chronicler_backend.models.node import NodeType as ModelNodeType
+from chronicler_backend.utils.embeddings import model_manager
+from chronicler_backend.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Auto-generate NodeType enum for GraphQL from the model definition
 # Create the enum dynamically based on the model's NodeType
@@ -235,3 +239,50 @@ class Query:
             )
             for node in nodes
         ]
+
+    @strawberry.field
+    def search_nodes_by_text(
+        self, info: Info, search_text: str, limit: int = 10, offset: int = 0
+    ) -> List[Node]:
+        """Search nodes by semantic similarity to the given text.
+
+        This query converts the input text to a vector embedding and
+        then performs a vector similarity search.
+
+        Args:
+            info: GraphQL resolver info with context
+            search_text: Text to search for
+            limit: Maximum number of results
+            offset: Offset for pagination
+
+        Returns:
+            List[Node]: List of nodes sorted by semantic similarity
+        """
+        db = info.context["db"]
+        node_db = NodeDatabase(db)
+
+        try:
+            # Generate embedding from search text
+            vector = model_manager.encode(search_text)
+
+            # Search using the vector
+            nodes = node_db.search_nodes_by_vector_similarity(
+                vector=vector, limit=limit, offset=offset
+            )
+
+            # Convert from model to GraphQL type
+            return [
+                Node(
+                    uuid=node.uuid,
+                    name=node.name,
+                    node_type=NodeType[node.node_type.name],
+                    description=node.description,
+                    date_range=DateRange.from_model(node.date_range),
+                    hierarchy_rank=node.node_type.value,
+                )
+                for node in nodes
+            ]
+        except Exception as e:
+            # Log error but don't expose details to client
+            logger.error(f"Error in search_nodes_by_text: {e}")
+            return []

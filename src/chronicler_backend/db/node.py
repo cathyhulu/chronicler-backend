@@ -6,7 +6,11 @@ from typing import Any, Dict, List, Optional, Union
 
 from chronicler_backend.db.neo4j import Neo4jDatabase
 from chronicler_backend.models.node import DateRange, Node, NodeType, RelationshipType
-from chronicler_backend.utils.constants import VECTOR_DIMENSION
+from chronicler_backend.utils.constants import (
+    TRUNCATE_DESCRIPTION_LENGTH,
+    VECTOR_DIMENSION,
+)
+from chronicler_backend.utils.embeddings import model_manager
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +44,62 @@ class NodeDatabase:
         """
         self.db = db
 
+    def _format_date_range_as_string(self, date_range: Optional[DateRange]) -> str:
+        """Format a date range as a string for embedding generation.
+
+        Args:
+            date_range: DateRange object to format
+
+        Returns:
+            str: Formatted date range string, or empty string if date_range is None
+        """
+        if not date_range:
+            return ""
+
+        start_fmt = date_range.start.strftime("%Y-%m-%d") if date_range.start else ""
+        end_fmt = date_range.end.strftime("%Y-%m-%d") if date_range.end else ""
+
+        if start_fmt and end_fmt:
+            return f"{start_fmt} to {end_fmt}"
+        elif start_fmt:
+            return f"from {start_fmt}"
+        elif end_fmt:
+            return f"until {end_fmt}"
+        return ""
+
+    def _generate_vector_embedding(self, node: Node) -> Optional[List[float]]:
+        """Generate a vector embedding for a node based on its properties.
+
+        Args:
+            node: Node to generate an embedding for
+
+        Returns:
+            Optional[List[float]]: Generated vector embedding or None if generation failed
+        """
+        try:
+            # Format date range as string for embedding
+            date_str = self._format_date_range_as_string(node.date_range)
+
+            # Truncate description if too long
+            if node.description and len(node.description.split()) > TRUNCATE_DESCRIPTION_LENGTH:
+                node.description = " ".join(node.description.split()[:TRUNCATE_DESCRIPTION_LENGTH])
+
+            # Prepare text for embedding
+            embedding_text = model_manager.prepare_node_text(
+                name=node.name,
+                node_type=node.node_type.name,
+                date_range=date_str,
+                description=node.description or "",
+            )
+
+            # Generate embedding
+            embedding = model_manager.encode(embedding_text)
+            logger.info(f"Generated vector embedding for node {node.name}")
+            return embedding
+        except Exception as e:
+            logger.error(f"Error generating vector embedding: {e}")
+            return None
+
     def create_node(self, node: Node) -> Optional[Node]:
         """Create a new node in the database.
 
@@ -65,6 +125,10 @@ class NodeDatabase:
         # Handle node_type
         node_data["node_type"] = node.node_type.name
         node_data["node_type_rank"] = node.node_type.value
+
+        # Generate vector embedding if not provided
+        if node.vector_embedding is None:
+            node.vector_embedding = self._generate_vector_embedding(node)
 
         # Handle vector embedding as a separate parameter if present
         vector_param = {}
@@ -129,22 +193,8 @@ class NodeDatabase:
             logger.error(f"Error getting node {uuid}: {e}")
             return None
 
-    def update_node(self, node: Node) -> Optional[Node]:
-        """Update an existing node.
-
-        Args:
-            node: Node with updated values
-
-        Returns:
-            Node: Updated node or None if update failed
-        """
-        # Check if node exists
-        existing = self.get_node(node.uuid)
-        if not existing:
-            logger.warning(f"Cannot update non-existent node: {node.uuid}")
-            return None
-
-        # Convert node to dictionary and prepare for update
+    def _prepare_node_data_for_update(self, node: Node) -> Dict[str, Any]:
+        """Prepare node data for update operation."""
         node_data = node.model_dump(exclude={"vector_embedding", "properties"})
 
         # Handle date range conversion for Neo4j
@@ -153,20 +203,43 @@ class NodeDatabase:
                 node_data["date_range_start"] = node.date_range.start
             if node.date_range.end:
                 node_data["date_range_end"] = node.date_range.end
-
-            # Remove the original date_range dict as we've flattened it
             node_data.pop("date_range")
 
         # Handle node_type
         node_data["node_type"] = node.node_type.name
         node_data["node_type_rank"] = node.node_type.value
 
-        # Handle vector embedding as a separate parameter if present
+        return node_data
+
+    def _should_update_embedding(self, node: Node, existing: Node) -> bool:
+        """Determine if vector embedding should be updated."""
+        return (
+            node.name != existing.name
+            or node.node_type != existing.node_type
+            or node.description != existing.description
+            or node.date_range != existing.date_range
+        )
+
+    def update_node(self, node: Node) -> Optional[Node]:
+        """Update an existing node."""
+        # Check if node exists
+        existing = self.get_node(node.uuid)
+        if not existing:
+            logger.warning(f"Cannot update non-existent node: {node.uuid}")
+            return None
+
+        # Prepare node data
+        node_data = self._prepare_node_data_for_update(node)
+
+        # Handle vector embedding
         vector_param = {}
+        if node.vector_embedding is None and self._should_update_embedding(node, existing):
+            node.vector_embedding = self._generate_vector_embedding(node)
+
         if node.vector_embedding:
             vector_param = {"vector": node.vector_embedding}
 
-        # Update the node
+        # Build and execute update query
         query = """
         MATCH (n:Node {uuid: $uuid})
         SET n += $properties
@@ -179,9 +252,9 @@ class NodeDatabase:
 
         query += """
         RETURN n.uuid as uuid, n.name as name, n.node_type as node_type,
-               n.description as description, n.node_type_rank as node_type_rank,
-               n.date_range_start as date_range_start, n.date_range_end as date_range_end,
-               n.vector_embedding as vector_embedding
+            n.description as description, n.node_type_rank as node_type_rank,
+            n.date_range_start as date_range_start, n.date_range_end as date_range_end,
+            n.vector_embedding as vector_embedding
         """
 
         try:
