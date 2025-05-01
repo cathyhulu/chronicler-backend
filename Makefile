@@ -241,7 +241,7 @@ endef
 
 test-all: podman-check
 	@mkdir -p logs
-	clear && $(call run_tests,${TESTS_DIR},${PYTEST_COV_MIN})
+	$(call run_tests,${TESTS_DIR},${PYTEST_COV_MIN})
 
 test-small: podman-check
 	@mkdir -p logs

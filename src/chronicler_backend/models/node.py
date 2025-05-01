@@ -7,10 +7,7 @@ from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from chronicler_backend.utils.constants import (
-    TRUNCATE_DESCRIPTION_LENGTH,
-    VECTOR_DIMENSION,
-)
+from chronicler_backend.utils.constants import VECTOR_DIMENSION
 from chronicler_backend.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -137,24 +134,4 @@ class Node(BaseModel):
         """
         if value is not None and len(value) != VECTOR_DIMENSION:
             raise ValueError(f"Vector embedding must be of dimension {VECTOR_DIMENSION}.")
-        return value
-
-    @field_validator("description")
-    def validate_description_length(cls, value: Optional[str]) -> Optional[str]:
-        """Log a warning if description exceeds 200 words.
-
-        Args:
-            value: Description text
-
-        Returns:
-            str: Original description
-        """
-        if value is not None:
-            words = value.split()
-            if len(words) > TRUNCATE_DESCRIPTION_LENGTH:
-                logger.warning(
-                    f"Description exceeds {TRUNCATE_DESCRIPTION_LENGTH} words"
-                    f" (has {len(words)} words). Will be truncated before"
-                    " conversion to vector embedding."
-                )
         return value

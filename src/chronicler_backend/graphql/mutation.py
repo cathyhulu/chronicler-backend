@@ -18,31 +18,46 @@ from chronicler_backend.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
-@strawberry.input
+@strawberry.input(description="Input type for date range creation and updates")
 class DateRangeInput:
     """Input type for date range creation/updates."""
 
-    start: Optional[datetime] = None
-    end: Optional[datetime] = None
+    start: Optional[datetime] = strawberry.field(
+        default=None, description="Start date of the range (optional)"
+    )
+    end: Optional[datetime] = strawberry.field(
+        default=None, description="End date of the range (optional)"
+    )
 
 
-@strawberry.input
+@strawberry.input(description="Input type for node creation and updates")
 class NodeInput:
     """Input type for node creation/updates."""
 
-    name: str
-    node_type: NodeType
-    description: Optional[str] = None
-    date_range: Optional[DateRangeInput] = None
-    vector_embedding: Optional[List[float]] = None
+    name: str = strawberry.field(description="Name of the node")
+    node_type: NodeType = strawberry.field(description="Type of the node (e.g., PERSON, EVENT)")
+    description: Optional[str] = strawberry.field(
+        default=None, description="Detailed description of the node"
+    )
+    date_range: Optional[DateRangeInput] = strawberry.field(
+        default=None, description="Time period associated with this node"
+    )
+    vector_embedding: Optional[List[float]] = strawberry.field(
+        default=None,
+        description=f"Vector embedding for semantic search (must be {VECTOR_DIMENSION} dimensions)",
+    )
 
 
-@strawberry.type
+@strawberry.type(description="Root mutation operations for the Chronicler API")
 class Mutation:
     """Root mutation type for GraphQL API."""
 
-    @strawberry.mutation
-    def create_node(self, info: Info, input: NodeInput) -> Node:
+    @strawberry.mutation(description="Create a new node in the knowledge graph")
+    def create_node(
+        self,
+        info: Info,
+        input: NodeInput,
+    ) -> Node:
         """Create a new node.
 
         Args:
@@ -95,8 +110,13 @@ class Mutation:
             hierarchy_rank=created_node.node_type.value,
         )
 
-    @strawberry.mutation
-    def update_node(self, info: Info, uuid: str, input: NodeInput) -> Optional[Node]:
+    @strawberry.mutation(description="Update an existing node in the knowledge graph")
+    def update_node(
+        self,
+        info: Info,
+        uuid: str,
+        input: NodeInput,
+    ) -> Optional[Node]:
         """Update an existing node.
 
         Args:
@@ -148,8 +168,12 @@ class Mutation:
             hierarchy_rank=updated_node.node_type.value,
         )
 
-    @strawberry.mutation
-    def delete_node(self, info: Info, uuid: str) -> bool:
+    @strawberry.mutation(description="Delete a node from the knowledge graph by UUID")
+    def delete_node(
+        self,
+        info: Info,
+        uuid: str,
+    ) -> bool:
         """Delete a node by UUID.
 
         Args:
@@ -164,9 +188,15 @@ class Mutation:
 
         return node_db.delete_node(uuid)
 
-    @strawberry.mutation
+    @strawberry.mutation(
+        description="Create a relationship between two nodes in the knowledge graph"
+    )
     def create_relationship(
-        self, info: Info, from_uuid: str, to_uuid: str, relationship_type: str
+        self,
+        info: Info,
+        from_uuid: str,
+        to_uuid: str,
+        relationship_type: str,
     ) -> bool:
         """Create a relationship between two nodes.
 
