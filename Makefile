@@ -276,10 +276,12 @@ endif
 # Model Management
 # ++++++++++++++++++++++++
 # Download and quantize the sentence transformer model locally
+# Usage: make download-model-local [force=true]
+# force=true will force the download even if the model already exists
 download-model-local:
 	@echo "Downloading and quantizing sentence transformer model locally..."
 	@mkdir -p $(MODEL_DIR) && \
-	uv run scripts/download_model.py --output-dir $(MODEL_PATH)
+	uv run scripts/download_model.py --output-dir $(MODEL_PATH) $(if $(filter true,$(force)),--force,)
 
 # Download and quantize the sentence transformer model within the Docker container
 download-model-docker: podman-check
@@ -293,6 +295,7 @@ download-model-docker: podman-check
 	else \
 		echo "No existing model found. Downloading and quantizing in container..."; \
 		MODEL_PATH_DOCKER=$$(echo $(MODEL_PATH) | sed 's|^\./|/app/|'); \
-		$(DOCKER_CMD) exec -it chronicler-backend bash -c "mkdir -p $$MODEL_PATH_DOCKER && MODEL_PATH=$$MODEL_PATH_DOCKER uv run /app/scripts/download_model.py"; \
+		$(DOCKER_CMD) exec -it chronicler-backend bash -c "mkdir -p $$MODEL_PATH_DOCKER \
+		&& MODEL_PATH=$$MODEL_PATH_DOCKER uv run /app/scripts/download_model.py"; \
 	fi
 	@echo "Model setup complete!"

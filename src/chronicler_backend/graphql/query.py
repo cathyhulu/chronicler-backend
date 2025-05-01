@@ -10,6 +10,7 @@ from strawberry.types import Info
 from chronicler_backend.db.node import NodeDatabase
 from chronicler_backend.models.node import DateRange as ModelDateRange
 from chronicler_backend.models.node import NodeType as ModelNodeType
+from chronicler_backend.models.node import RelationshipType as ModelRelationshipType
 from chronicler_backend.utils.constants import TRUNCATE_DESCRIPTION_LENGTH
 from chronicler_backend.utils.embeddings import model_manager
 from chronicler_backend.utils.logging import get_logger
@@ -22,6 +23,24 @@ NodeTypeDict = {node_type.name: node_type.name for node_type in ModelNodeType}
 NodeType = strawberry.enum(
     enum.Enum("NodeType", NodeTypeDict), description="Types of nodes in the knowledge graph"
 )
+
+# Auto-generate RelationshipType enum for GraphQL from the model definition
+RelationshipTypeDict = {rel_type.name: rel_type.value for rel_type in ModelRelationshipType}
+RelationshipType = strawberry.enum(
+    enum.Enum("RelationshipType", RelationshipTypeDict),
+    description="Types of relationships between nodes in the knowledge graph",
+)
+
+
+# Define rank filter enum options
+@strawberry.enum(description="Options for filtering nodes by their hierarchical rank")
+class RankFilterType(enum.Enum):
+    """Enum for rank filter options when querying node neighbors."""
+
+    HIGHER = "higher"
+    LOWER = "lower"
+    HIGHER_EQUAL = "higher_equal"
+    LOWER_EQUAL = "lower_equal"
 
 
 # Auto-generate DateRange type for GraphQL from the model definition
@@ -175,6 +194,12 @@ class Query:
         same_type_only: Annotated[
             bool, strawberry.argument(description="Filter to only return nodes of the same type")
         ] = True,
+        rank_filter: Annotated[
+            Optional[RankFilterType],
+            strawberry.argument(
+                description="Filter by node type rank relative to the current node"
+            ),
+        ] = None,
         limit: Annotated[
             int, strawberry.argument(description="Maximum number of nodes to return")
         ] = 10,
@@ -188,6 +213,7 @@ class Query:
             info: GraphQL resolver info with context
             uuid: Node UUID
             same_type_only: Only return nodes of the same type
+            rank_filter: Filter by node type rank relative to the current node
             limit: Maximum number of results
             offset: Offset for pagination
 
@@ -197,8 +223,15 @@ class Query:
         db = info.context["db"]
         node_db = NodeDatabase(db)
 
+        # Convert the enum value to string if rank_filter is provided
+        rank_filter_value = rank_filter.value if rank_filter else None
+
         neighbors = node_db.get_node_neighbors(
-            uuid, same_type_only=same_type_only, limit=limit, offset=offset
+            uuid,
+            same_type_only=same_type_only,
+            rank_filter=rank_filter_value,
+            limit=limit,
+            offset=offset,
         )
 
         # Convert from model to GraphQL type

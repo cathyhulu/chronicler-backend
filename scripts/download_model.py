@@ -53,7 +53,12 @@ def main():
     # Create output directory if it doesn't exist
     output_path.mkdir(parents=True, exist_ok=True)
 
-    if output_path.exists() and list(output_path.glob("**/*.onnx")) and not args.force:
+    if (
+        output_path.exists()
+        and list(output_path.glob("**/*.onnx"))
+        and list(output_path.glob("**/config.json"))
+        and not args.force
+    ):
         logger.info(f"Model already exists at {output_path}. Use --force to redownload.")
         sys.exit(0)
 

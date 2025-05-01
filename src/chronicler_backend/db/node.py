@@ -294,47 +294,60 @@ class NodeDatabase:
             return False
 
     def get_node_neighbors(
-        self, uuid: str, same_type_only: bool = True, limit: int = 10, offset: int = 0
+        self,
+        uuid: str,
+        same_type_only: bool = True,
+        rank_filter: str = None,
+        limit: int = 10,
+        offset: int = 0,
     ) -> List[Node]:
         """Get all neighbors of a node.
 
         Args:
             uuid: Node UUID
-            same_type_only: Only return nodes of the same type
+            same_type_only: Only return nodes of the same type. Overriden by rank_filter
+            rank_filter: Filter by node type rank. Options: "higher", "lower", "higher_equal",
+                        "lower_equal", or None for no rank filtering
             limit: Maximum number of results
             offset: Offset for pagination
 
         Returns:
             List[Node]: List of neighbor nodes
         """
-        # Query to get neighbors, with optional type filtering
-        if same_type_only:
-            query = """
-            MATCH (n:Node {uuid: $uuid})-[r]-(neighbor:Node)
-            WHERE neighbor.node_type = n.node_type
-            RETURN neighbor.uuid as uuid, neighbor.name as name,
-                   neighbor.node_type as node_type, neighbor.description as description,
-                   neighbor.node_type_rank as node_type_rank,
-                   neighbor.date_range_start as date_range_start,
-                   neighbor.date_range_end as date_range_end,
-                   neighbor.vector_embedding as vector_embedding
-            ORDER BY neighbor.name
-            SKIP $offset
-            LIMIT $limit
-            """
+        # Build the base query
+        query = """
+        MATCH (n:Node {uuid: $uuid})-[r]-(neighbor:Node)
+        """
+
+        if rank_filter == "higher":
+            where_clause = "neighbor.node_type_rank > n.node_type_rank"
+        elif rank_filter == "lower":
+            where_clause = "neighbor.node_type_rank < n.node_type_rank"
+        elif rank_filter == "higher_equal":
+            where_clause = "neighbor.node_type_rank >= n.node_type_rank"
+        elif rank_filter == "lower_equal":
+            where_clause = "neighbor.node_type_rank <= n.node_type_rank"
+        elif same_type_only:
+            where_clause = "neighbor.node_type = n.node_type"
         else:
-            query = """
-            MATCH (n:Node {uuid: $uuid})-[r]-(neighbor:Node)
-            RETURN neighbor.uuid as uuid, neighbor.name as name,
-                   neighbor.node_type as node_type, neighbor.description as description,
-                   neighbor.node_type_rank as node_type_rank,
-                   neighbor.date_range_start as date_range_start,
-                   neighbor.date_range_end as date_range_end,
-                   neighbor.vector_embedding as vector_embedding
-            ORDER BY neighbor.name
-            SKIP $offset
-            LIMIT $limit
-            """
+            where_clause = ""
+
+        # Add WHERE clause if we have conditions
+        if where_clause:
+            query += f"\nWHERE {where_clause}"
+
+        # Complete the query with the common parts
+        query += """
+        RETURN neighbor.uuid as uuid, neighbor.name as name,
+            neighbor.node_type as node_type, neighbor.description as description,
+            neighbor.node_type_rank as node_type_rank,
+            neighbor.date_range_start as date_range_start,
+            neighbor.date_range_end as date_range_end,
+            neighbor.vector_embedding as vector_embedding
+        ORDER BY neighbor.name
+        SKIP $offset
+        LIMIT $limit
+        """
 
         try:
             results = self.db.run_query(query, {"uuid": uuid, "limit": limit, "offset": offset})

@@ -39,8 +39,8 @@ RUN mkdir -p ${MODEL_DIR}
 # Download model
 RUN echo "Downloading model to ${MODEL_DIR}/quantized-model" && \
     . /app/.venv/bin/activate && \
-    uv run scripts/download_model.py --output-dir ${MODEL_DIR}/quantized-model --verbose && \
-    ls -la ${MODEL_DIR}/quantized-model
+    uv run scripts/download_model.py --output-dir ${MODEL_DIR}/quantized-model \
+    --verbose --force
 
 # Expose port
 EXPOSE 8000

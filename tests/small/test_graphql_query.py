@@ -193,7 +193,7 @@ def test_query_node_neighbors(mocker):
 
     # Verify that NodeDatabase.get_node_neighbors was called with the correct params
     mock_node_db.get_node_neighbors.assert_called_once_with(
-        "test-uuid", same_type_only=True, limit=5, offset=0
+        "test-uuid", same_type_only=True, rank_filter=None, limit=5, offset=0
     )
 
     # Verify the returned GraphQL nodes match our model nodes
@@ -204,6 +204,46 @@ def test_query_node_neighbors(mocker):
         assert node.node_type == NodeType.BATTLE
         assert node.description == f"Neighbor Description {i}"
         assert node.hierarchy_rank == ModelNodeType.BATTLE.value
+
+    # Reset mock for the next test
+    mock_node_db.reset_mock()
+
+    # Configure mock for rank filter test
+    lower_rank_neighbors = [
+        ModelNode(
+            uuid="city-node",
+            name="City Node",
+            node_type=ModelNodeType.CITY,
+            description="A city node with lower rank",
+        )
+    ]
+    mock_node_db.get_node_neighbors.return_value = lower_rank_neighbors
+
+    # Import the RankFilterType enum
+    from chronicler_backend.graphql.query import RankFilterType
+
+    # Test with rank filter
+    result_with_rank_filter = query.node_neighbors(
+        mock_info,
+        uuid="test-uuid",
+        same_type_only=False,
+        rank_filter=RankFilterType.LOWER,
+        limit=5,
+        offset=0,
+    )
+
+    # Verify the correct parameters were passed with rank filter value
+    mock_node_db.get_node_neighbors.assert_called_once_with(
+        "test-uuid", same_type_only=False, rank_filter="lower", limit=5, offset=0
+    )
+
+    # Verify the returned GraphQL nodes match our model nodes for rank filter
+    assert len(result_with_rank_filter) == 1
+    assert result_with_rank_filter[0].uuid == "city-node"
+    assert result_with_rank_filter[0].name == "City Node"
+    assert result_with_rank_filter[0].node_type == NodeType.CITY
+    assert result_with_rank_filter[0].description == "A city node with lower rank"
+    assert result_with_rank_filter[0].hierarchy_rank == ModelNodeType.CITY.value
 
 
 def test_query_nodes_by_date_range(mocker):

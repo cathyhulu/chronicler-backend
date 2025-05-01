@@ -8,11 +8,11 @@ import strawberry
 from strawberry.types import Info
 
 from chronicler_backend.db.node import NodeDatabase
-from chronicler_backend.graphql.query import DateRange, Node, NodeType
+from chronicler_backend.graphql.query import DateRange, Node, NodeType, RelationshipType
 from chronicler_backend.models.node import DateRange as ModelDateRange
 from chronicler_backend.models.node import Node as ModelNode
 from chronicler_backend.models.node import NodeType as ModelNodeType
-from chronicler_backend.models.node import RelationshipType
+from chronicler_backend.models.node import RelationshipType as ModelRelationshipType
 from chronicler_backend.utils.constants import VECTOR_DIMENSION
 from chronicler_backend.utils.logging import get_logger
 
@@ -227,8 +227,12 @@ class Mutation:
         node_db = NodeDatabase(db)
 
         try:
-            # Use the NodeDatabase method which accepts RelationshipType
-            return node_db.create_relationship(from_uuid, to_uuid, relationship_type)
+            # Convert the GraphQL enum to the model enum by
+            # constructing the model enum from the value
+            model_relationship_type = ModelRelationshipType(relationship_type.value)
+
+            # Use the NodeDatabase method with the converted model enum
+            return node_db.create_relationship(from_uuid, to_uuid, model_relationship_type)
         except Exception as e:
             logger.error(f"Failed to create relationship: {e}")
             return False

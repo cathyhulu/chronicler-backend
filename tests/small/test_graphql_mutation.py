@@ -5,11 +5,11 @@ from datetime import datetime
 import pytest
 
 from chronicler_backend.graphql.mutation import DateRangeInput, Mutation, NodeInput
-from chronicler_backend.graphql.query import NodeType
+from chronicler_backend.graphql.query import NodeType, RelationshipType
 from chronicler_backend.models.node import DateRange as ModelDateRange
 from chronicler_backend.models.node import Node as ModelNode
 from chronicler_backend.models.node import NodeType as ModelNodeType
-from chronicler_backend.models.node import RelationshipType
+from chronicler_backend.models.node import RelationshipType as ModelRelationshipType
 from chronicler_backend.utils.constants import VECTOR_DIMENSION
 
 
@@ -295,10 +295,13 @@ def test_create_relationship(mocker):
         relationship_type=RelationshipType.PARTICIPATED_IN,
     )
 
-    # Verify the NodeDatabase was called correctly
-    mock_node_db.create_relationship.assert_called_once_with(
-        "source-uuid", "target-uuid", RelationshipType.PARTICIPATED_IN
-    )
+    # Verify the NodeDatabase was called correctly with the ModelRelationshipType
+    mock_node_db.create_relationship.assert_called_once()
+    args = mock_node_db.create_relationship.call_args[0]
+    assert args[0] == "source-uuid"
+    assert args[1] == "target-uuid"
+    assert isinstance(args[2], ModelRelationshipType)
+    assert args[2].value == "PARTICIPATED_IN"
 
     # Verify result is True (relationship created)
     assert result is True
@@ -328,7 +331,7 @@ def test_create_relationship_failure(mocker):
         mock_info,
         from_uuid="invalid-uuid",
         to_uuid="invalid-uuid-2",
-        relationship_type=RelationshipType.FOLLOWS,  # Using a valid enum value
+        relationship_type=RelationshipType.FOLLOWS,
     )
 
     # Verify result is False (failed to create relationship)

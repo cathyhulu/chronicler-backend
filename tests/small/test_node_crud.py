@@ -70,6 +70,9 @@ def test_node_relationships(neo4j_db):
     )
     created_country = node_db.create_node(country)
 
+    country2 = Node(name="Canada", node_type=NodeType.COUNTRY, description="North American nation")
+    created_country2 = node_db.create_node(country2)
+
     # Create two child nodes (battles)
     battle1 = Node(
         name="Battle of Midway",
@@ -87,41 +90,81 @@ def test_node_relationships(neo4j_db):
     )
     created_battle2 = node_db.create_node(battle2)
 
+    # Create a city node (lower rank than country)
+    city = Node(
+        name="Washington D.C.",
+        node_type=NodeType.CITY,
+        description="Capital city of the United States",
+    )
+    created_city = node_db.create_node(city)
+
     # Create relationships using the new relationship type enum
+    assert node_db.create_relationship(
+        created_country.uuid, created_country2.uuid, RelationshipType.BORDERS
+    )
     assert node_db.create_relationship(
         created_country.uuid, created_battle1.uuid, RelationshipType.PARTICIPATED_IN
     )
     assert node_db.create_relationship(
         created_country.uuid, created_battle2.uuid, RelationshipType.PARTICIPATED_IN
     )
+    assert node_db.create_relationship(
+        created_country.uuid, created_city.uuid, RelationshipType.CONTAINS
+    )
 
     # Test getting relationships
     country_relationships = node_db.get_relationships(created_country.uuid, direction="OUTGOING")
-    assert len(country_relationships) == 2
+    assert len(country_relationships) == 4
 
     # Check relationship types
-    rel_types = [r["relationship_type"] for r in country_relationships]
-    assert all(rel_type == RelationshipType.PARTICIPATED_IN.value for rel_type in rel_types)
+    battle_rel_types = [
+        r["relationship_type"]
+        for r in country_relationships
+        if r["other_node_uuid"] in [created_battle1.uuid, created_battle2.uuid]
+    ]
+    assert all(rel_type == RelationshipType.PARTICIPATED_IN.value for rel_type in battle_rel_types)
 
-    # Check that related nodes are the battles
+    # Check that related nodes are the battles and city
     related_nodes = [r["other_node_uuid"] for r in country_relationships]
     assert created_battle1.uuid in related_nodes
     assert created_battle2.uuid in related_nodes
+    assert created_city.uuid in related_nodes
+    assert created_country2.uuid in related_nodes
 
-    # Get neighbors - should find both battles
+    # Get neighbors - should find both battles and the city
     neighbors = node_db.get_node_neighbors(created_country.uuid, same_type_only=False)
-    assert len(neighbors) == 2
+    assert len(neighbors) == 4
     neighbor_names = [n.name for n in neighbors]
     assert "Battle of Midway" in neighbor_names
     assert "D-Day" in neighbor_names
+    assert "Washington D.C." in neighbor_names
+    assert "Canada" in neighbor_names
 
-    # Get neighbors of same type - should find none since there are no other countries
+    # Get neighbors of same type - should find 1 country
     same_type_neighbors = node_db.get_node_neighbors(created_country.uuid, same_type_only=True)
-    assert len(same_type_neighbors) == 0
+    assert len(same_type_neighbors) == 1
+    assert same_type_neighbors[0].name == "Canada"
+
+    # Test rank filtering - lower (should find battles and city)
+    lower_rank_neighbors = node_db.get_node_neighbors(
+        created_country.uuid, same_type_only=False, rank_filter="lower"
+    )
+    assert len(lower_rank_neighbors) == 3
+    neighbor_names = [n.name for n in neighbors]
+    assert "Battle of Midway" in neighbor_names
+    assert "D-Day" in neighbor_names
+    assert "Washington D.C." in neighbor_names
+
+    # Test rank filtering - higher (should find nothing)
+    higher_equal_neighbors = node_db.get_node_neighbors(
+        created_country.uuid, same_type_only=False, rank_filter="higher"
+    )
+    assert len(higher_equal_neighbors) == 0
 
     # Clean up
     node_db.delete_node(created_battle1.uuid)
     node_db.delete_node(created_battle2.uuid)
+    node_db.delete_node(created_city.uuid)
     node_db.delete_node(created_country.uuid)
 
 

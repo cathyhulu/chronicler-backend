@@ -71,7 +71,6 @@ services:
     volumes:
       - .:/app
       - api_packages:/app/.venv
-      - model_weights_volume:/app/model_weights
     depends_on:
       neo4j:
         condition: service_healthy
@@ -103,6 +102,4 @@ volumes:
   neo4j_data:
     driver: local
   api_packages:
-    driver: local
-  model_weights_volume:
     driver: local
