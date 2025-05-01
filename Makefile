@@ -1,10 +1,12 @@
 .PHONY: clean docker-up docker-down docker-clean docker-deep-clean docker-build docker-logs docker-status \
 		docker-shell docker-test docker-test-small docker-test-medium docker-test-large \
 		format isort black flake8 pylint neo4j-shell neo4j-test-shell scripts-executable \
-		podman-check
+		podman-check download-model-local download-model-docker
 
 SOURCE_DIR=./src
 SOURCE_PATH=./src/chronicler-backend
+MODEL_DIR=./model_weights
+MODEL_PATH=./model_weights/quantized-model
 TESTS_DIR=./tests
 PYTEST_LOG_LEVEL=DEBUG
 PYTEST_COV_MIN=50
@@ -112,9 +114,12 @@ setup-dev: scripts-executable
 # ++++++++++++++++++++++++
 setup-local-dev:
 	@echo "Setting up local development environment..."
+	@echo "Creating virtual environment..."
 	uv venv
 	uv pip install -e .[dev,test]
+	@echo "Installing pre-commit hooks..."
 	uv run pre-commit install
+	make download-model-local
 	@echo "Local development environment ready!"
 	@echo "Note: You'll still need Neo4j running for database operations"
 	@echo "Consider 'make neo4j-only' for just the Neo4j service if needed"
@@ -266,3 +271,28 @@ ifndef TEST_CASE
 endif
 	@mkdir -p logs
 	$(call run_tests,$(TEST_PATH) -k "$(TEST_CASE)")
+
+# ++++++++++++++++++++++++
+# Model Management
+# ++++++++++++++++++++++++
+# Download and quantize the sentence transformer model locally
+download-model-local:
+	@echo "Downloading and quantizing sentence transformer model locally..."
+	@mkdir -p $(MODEL_DIR) && \
+	uv run scripts/download_model.py --output-dir $(MODEL_PATH)
+
+# Download and quantize the sentence transformer model within the Docker container
+download-model-docker: podman-check
+	@echo "Checking for existing model files..."
+	@if [ -d "$(MODEL_PATH)" ] && [ "$$(ls -A $(MODEL_PATH) 2>/dev/null)" ]; then \
+		echo "Found existing model files, copying to container..."; \
+		MODEL_PATH_DOCKER=$$(echo $(MODEL_PATH) | sed 's|^\./|/app/|'); \
+		$(DOCKER_CMD) exec -it chronicler-backend bash -c "mkdir -p $$MODEL_PATH_DOCKER"; \
+		$(DOCKER_CMD) cp $(MODEL_PATH)/. chronicler-backend:$$MODEL_PATH_DOCKER/; \
+		echo "Model files copied to container!"; \
+	else \
+		echo "No existing model found. Downloading and quantizing in container..."; \
+		MODEL_PATH_DOCKER=$$(echo $(MODEL_PATH) | sed 's|^\./|/app/|'); \
+		$(DOCKER_CMD) exec -it chronicler-backend bash -c "mkdir -p $$MODEL_PATH_DOCKER && MODEL_PATH=$$MODEL_PATH_DOCKER uv run /app/scripts/download_model.py"; \
+	fi
+	@echo "Model setup complete!"

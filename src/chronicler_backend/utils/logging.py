@@ -49,7 +49,7 @@ def _setup_logging(
     log_level_name = os.getenv(env_key_level)
     if log_level_name:
         try:
-            log_level = getattr(logging, log_level_name.upper())
+            log_level = getattr(logging, log_level_name.upper().strip())
         except AttributeError:
             # Fall back to default if invalid level name
             log_level = default_level
