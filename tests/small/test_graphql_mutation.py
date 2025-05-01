@@ -9,6 +9,7 @@ from chronicler_backend.graphql.query import NodeType
 from chronicler_backend.models.node import DateRange as ModelDateRange
 from chronicler_backend.models.node import Node as ModelNode
 from chronicler_backend.models.node import NodeType as ModelNodeType
+from chronicler_backend.models.node import RelationshipType
 from chronicler_backend.utils.constants import VECTOR_DIMENSION
 
 
@@ -275,6 +276,13 @@ def test_create_relationship(mocker):
     # Configure the mock to return a success result for run_query
     mock_db.run_query.return_value = {"created": 1}
 
+    # Create mock NodeDatabase
+    mock_node_db = mocker.MagicMock()
+    mock_node_db.create_relationship.return_value = True
+
+    # Mock NodeDatabase constructor
+    mocker.patch("chronicler_backend.graphql.mutation.NodeDatabase", return_value=mock_node_db)
+
     # Create mock info object
     mock_info = MockInfo(context={"db": mock_db})
 
@@ -284,17 +292,13 @@ def test_create_relationship(mocker):
         mock_info,
         from_uuid="source-uuid",
         to_uuid="target-uuid",
-        relationship_type="PARTICIPATED_IN",
+        relationship_type=RelationshipType.PARTICIPATED_IN,
     )
 
-    # Verify the database was called correctly
-    mock_db.run_query.assert_called_once()
-
-    # Check parameters passed to run_query
-    call_args = mock_db.run_query.call_args
-    assert "source-uuid" in str(call_args)
-    assert "target-uuid" in str(call_args)
-    assert "PARTICIPATED_IN" in str(call_args)
+    # Verify the NodeDatabase was called correctly
+    mock_node_db.create_relationship.assert_called_once_with(
+        "source-uuid", "target-uuid", RelationshipType.PARTICIPATED_IN
+    )
 
     # Verify result is True (relationship created)
     assert result is True
@@ -302,9 +306,15 @@ def test_create_relationship(mocker):
 
 def test_create_relationship_failure(mocker):
     """Test create_relationship mutation when creation fails."""
-    # Mock the database with an exception
+    # Mock the database
     mock_db = mocker.MagicMock()
-    mock_db.run_query.side_effect = Exception("Database error")
+
+    # Create mock NodeDatabase that raises an exception
+    mock_node_db = mocker.MagicMock()
+    mock_node_db.create_relationship.side_effect = Exception("Database error")
+
+    # Mock NodeDatabase constructor
+    mocker.patch("chronicler_backend.graphql.mutation.NodeDatabase", return_value=mock_node_db)
 
     # Create mock info object
     mock_info = MockInfo(context={"db": mock_db})
@@ -318,7 +328,7 @@ def test_create_relationship_failure(mocker):
         mock_info,
         from_uuid="invalid-uuid",
         to_uuid="invalid-uuid-2",
-        relationship_type="INVALID_TYPE",
+        relationship_type=RelationshipType.FOLLOWS,  # Using a valid enum value
     )
 
     # Verify result is False (failed to create relationship)

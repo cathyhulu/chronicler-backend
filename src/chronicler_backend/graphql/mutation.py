@@ -12,6 +12,7 @@ from chronicler_backend.graphql.query import DateRange, Node, NodeType
 from chronicler_backend.models.node import DateRange as ModelDateRange
 from chronicler_backend.models.node import Node as ModelNode
 from chronicler_backend.models.node import NodeType as ModelNodeType
+from chronicler_backend.models.node import RelationshipType
 from chronicler_backend.utils.constants import VECTOR_DIMENSION
 from chronicler_backend.utils.logging import get_logger
 
@@ -207,7 +208,8 @@ class Mutation:
             str, strawberry.argument(description="Unique identifier of the target node")
         ],
         relationship_type: Annotated[
-            str, strawberry.argument(description="Type of relationship between the nodes")
+            RelationshipType,
+            strawberry.argument(description="Type of relationship between the nodes"),
         ],
     ) -> bool:
         """Create a relationship between two nodes.
@@ -216,30 +218,17 @@ class Mutation:
             info: GraphQL resolver info with context
             from_uuid: UUID of the source node
             to_uuid: UUID of the target node
-            relationship_type: Type of relationship
+            relationship_type: Type of relationship from RelationshipType enum
 
         Returns:
             bool: True if relationship was created, False otherwise
         """
         db = info.context["db"]
-
-        # Uppercase the relationship type for Neo4j convention
-        rel_type = relationship_type.upper().replace(" ", "_")
-
-        # Create the relationship
-        query = f"""
-        MATCH (a:Node {{uuid: $from_uuid}})
-        MATCH (b:Node {{uuid: $to_uuid}})
-        CREATE (a)-[r:`{rel_type}`]->(b)
-        RETURN count(r) as created
-        """
+        node_db = NodeDatabase(db)
 
         try:
-            result = db.run_query(
-                query, {"from_uuid": from_uuid, "to_uuid": to_uuid}, return_single=True
-            )
-
-            return result and result.get("created", 0) > 0
+            # Use the NodeDatabase method which accepts RelationshipType
+            return node_db.create_relationship(from_uuid, to_uuid, relationship_type)
         except Exception as e:
             logger.error(f"Failed to create relationship: {e}")
             return False
