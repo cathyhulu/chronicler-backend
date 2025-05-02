@@ -19,6 +19,11 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Neo4j database for testing
   neo4j-test:
@@ -35,12 +40,20 @@ services:
     networks:
       - chronicler-network
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # FastAPI backend using UV with Python 3.12
   api:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - ENV=${ENV:-production}
+        - MODEL_DIR=/app/model_weights
     container_name: chronicler-backend
     ports:
       - "${FASTAPI_PORT:-8000}:8000"
@@ -59,13 +72,18 @@ services:
     volumes:
       - .:/app
       - api_packages:/app/.venv
+      - model_weights:/app/model_weights
     depends_on:
       neo4j:
         condition: service_healthy
     networks:
       - chronicler-network
-    command: ["uvicorn", "src.chronicler_backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   chronicler-network:
@@ -75,4 +93,6 @@ volumes:
   neo4j_data:
     driver: local
   api_packages:
+    driver: local
+  model_weights:
     driver: local

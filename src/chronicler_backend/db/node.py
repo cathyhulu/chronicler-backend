@@ -5,8 +5,13 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from chronicler_backend.db.neo4j import Neo4jDatabase
+from chronicler_backend.embeddings.api import get_model_manager
+from chronicler_backend.embeddings.manager import ModelManager
 from chronicler_backend.models.node import DateRange, Node, NodeType, RelationshipType
-from chronicler_backend.utils.constants import VECTOR_DIMENSION
+from chronicler_backend.utils.constants import (
+    TRUNCATE_DESCRIPTION_LENGTH,
+    VECTOR_DIMENSION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +44,78 @@ class NodeDatabase:
             db: Neo4j database connection
         """
         self.db = db
+        self._model_manager = None
 
-    def create_node(self, node: Node) -> Optional[Node]:
+    async def _get_model_manager(self) -> ModelManager:
+        """Get the ModelManager instance asynchronously.
+
+        Returns:
+            ModelManager: The model manager instance
+        """
+        if self._model_manager is None:
+            self._model_manager = await get_model_manager()
+        return self._model_manager
+
+    def _format_date_range_as_string(self, date_range: Optional[DateRange]) -> str:
+        """Format a date range as a string for embedding generation.
+
+        Args:
+            date_range: DateRange object to format
+
+        Returns:
+            str: Formatted date range string, or empty string if date_range is None
+        """
+        if not date_range:
+            return ""
+
+        start_fmt = date_range.start.strftime("%Y-%m-%d") if date_range.start else ""
+        end_fmt = date_range.end.strftime("%Y-%m-%d") if date_range.end else ""
+
+        if start_fmt and end_fmt:
+            return f"{start_fmt} to {end_fmt}"
+        elif start_fmt:
+            return f"from {start_fmt}"
+        elif end_fmt:
+            return f"until {end_fmt}"
+        return ""
+
+    async def _generate_vector_embedding(self, node: Node) -> Optional[List[float]]:
+        """Generate a vector embedding for a node based on its properties.
+
+        Args:
+            node: Node to generate an embedding for
+
+        Returns:
+            Optional[List[float]]: Generated vector embedding or None if generation failed
+        """
+        try:
+            # Get the model manager
+            model_manager = await self._get_model_manager()
+
+            # Format date range as string for embedding
+            date_str = self._format_date_range_as_string(node.date_range)
+
+            # Truncate description if too long
+            if node.description and len(node.description.split()) > TRUNCATE_DESCRIPTION_LENGTH:
+                node.description = " ".join(node.description.split()[:TRUNCATE_DESCRIPTION_LENGTH])
+
+            # Prepare text for embedding
+            embedding_text = model_manager.prepare_node_text(
+                name=node.name,
+                node_type=node.node_type.name,
+                date_range=date_str,
+                description=node.description or "",
+            )
+
+            # Generate embedding
+            embedding = model_manager.encode(embedding_text)
+            logger.info(f"Generated vector embedding for node {node.name}")
+            return embedding
+        except Exception as e:
+            logger.error(f"Error generating vector embedding: {e}")
+            return None
+
+    async def create_node(self, node: Node) -> Optional[Node]:
         """Create a new node in the database.
 
         Args:
@@ -65,6 +140,10 @@ class NodeDatabase:
         # Handle node_type
         node_data["node_type"] = node.node_type.name
         node_data["node_type_rank"] = node.node_type.value
+
+        # Generate vector embedding if not provided
+        if node.vector_embedding is None:
+            node.vector_embedding = await self._generate_vector_embedding(node)
 
         # Handle vector embedding as a separate parameter if present
         vector_param = {}
@@ -129,22 +208,8 @@ class NodeDatabase:
             logger.error(f"Error getting node {uuid}: {e}")
             return None
 
-    def update_node(self, node: Node) -> Optional[Node]:
-        """Update an existing node.
-
-        Args:
-            node: Node with updated values
-
-        Returns:
-            Node: Updated node or None if update failed
-        """
-        # Check if node exists
-        existing = self.get_node(node.uuid)
-        if not existing:
-            logger.warning(f"Cannot update non-existent node: {node.uuid}")
-            return None
-
-        # Convert node to dictionary and prepare for update
+    def _prepare_node_data_for_update(self, node: Node) -> Dict[str, Any]:
+        """Prepare node data for update operation."""
         node_data = node.model_dump(exclude={"vector_embedding", "properties"})
 
         # Handle date range conversion for Neo4j
@@ -153,20 +218,43 @@ class NodeDatabase:
                 node_data["date_range_start"] = node.date_range.start
             if node.date_range.end:
                 node_data["date_range_end"] = node.date_range.end
-
-            # Remove the original date_range dict as we've flattened it
             node_data.pop("date_range")
 
         # Handle node_type
         node_data["node_type"] = node.node_type.name
         node_data["node_type_rank"] = node.node_type.value
 
-        # Handle vector embedding as a separate parameter if present
+        return node_data
+
+    def _should_update_embedding(self, node: Node, existing: Node) -> bool:
+        """Determine if vector embedding should be updated."""
+        return (
+            node.name != existing.name
+            or node.node_type != existing.node_type
+            or node.description != existing.description
+            or node.date_range != existing.date_range
+        )
+
+    async def update_node(self, node: Node) -> Optional[Node]:
+        """Update an existing node."""
+        # Check if node exists
+        existing = self.get_node(node.uuid)
+        if not existing:
+            logger.warning(f"Cannot update non-existent node: {node.uuid}")
+            return None
+
+        # Prepare node data
+        node_data = self._prepare_node_data_for_update(node)
+
+        # Handle vector embedding
         vector_param = {}
+        if node.vector_embedding is None and self._should_update_embedding(node, existing):
+            node.vector_embedding = await self._generate_vector_embedding(node)
+
         if node.vector_embedding:
             vector_param = {"vector": node.vector_embedding}
 
-        # Update the node
+        # Build and execute update query
         query = """
         MATCH (n:Node {uuid: $uuid})
         SET n += $properties
@@ -179,9 +267,9 @@ class NodeDatabase:
 
         query += """
         RETURN n.uuid as uuid, n.name as name, n.node_type as node_type,
-               n.description as description, n.node_type_rank as node_type_rank,
-               n.date_range_start as date_range_start, n.date_range_end as date_range_end,
-               n.vector_embedding as vector_embedding
+            n.description as description, n.node_type_rank as node_type_rank,
+            n.date_range_start as date_range_start, n.date_range_end as date_range_end,
+            n.vector_embedding as vector_embedding
         """
 
         try:
@@ -221,47 +309,60 @@ class NodeDatabase:
             return False
 
     def get_node_neighbors(
-        self, uuid: str, same_type_only: bool = True, limit: int = 10, offset: int = 0
+        self,
+        uuid: str,
+        same_type_only: bool = True,
+        rank_filter: str = None,
+        limit: int = 10,
+        offset: int = 0,
     ) -> List[Node]:
         """Get all neighbors of a node.
 
         Args:
             uuid: Node UUID
-            same_type_only: Only return nodes of the same type
+            same_type_only: Only return nodes of the same type. Overriden by rank_filter
+            rank_filter: Filter by node type rank. Options: "higher", "lower", "higher_equal",
+                        "lower_equal", or None for no rank filtering
             limit: Maximum number of results
             offset: Offset for pagination
 
         Returns:
             List[Node]: List of neighbor nodes
         """
-        # Query to get neighbors, with optional type filtering
-        if same_type_only:
-            query = """
-            MATCH (n:Node {uuid: $uuid})-[r]-(neighbor:Node)
-            WHERE neighbor.node_type = n.node_type
-            RETURN neighbor.uuid as uuid, neighbor.name as name,
-                   neighbor.node_type as node_type, neighbor.description as description,
-                   neighbor.node_type_rank as node_type_rank,
-                   neighbor.date_range_start as date_range_start,
-                   neighbor.date_range_end as date_range_end,
-                   neighbor.vector_embedding as vector_embedding
-            ORDER BY neighbor.name
-            SKIP $offset
-            LIMIT $limit
-            """
+        # Build the base query
+        query = """
+        MATCH (n:Node {uuid: $uuid})-[r]-(neighbor:Node)
+        """
+
+        if rank_filter == "higher":
+            where_clause = "neighbor.node_type_rank > n.node_type_rank"
+        elif rank_filter == "lower":
+            where_clause = "neighbor.node_type_rank < n.node_type_rank"
+        elif rank_filter == "higher_equal":
+            where_clause = "neighbor.node_type_rank >= n.node_type_rank"
+        elif rank_filter == "lower_equal":
+            where_clause = "neighbor.node_type_rank <= n.node_type_rank"
+        elif same_type_only:
+            where_clause = "neighbor.node_type = n.node_type"
         else:
-            query = """
-            MATCH (n:Node {uuid: $uuid})-[r]-(neighbor:Node)
-            RETURN neighbor.uuid as uuid, neighbor.name as name,
-                   neighbor.node_type as node_type, neighbor.description as description,
-                   neighbor.node_type_rank as node_type_rank,
-                   neighbor.date_range_start as date_range_start,
-                   neighbor.date_range_end as date_range_end,
-                   neighbor.vector_embedding as vector_embedding
-            ORDER BY neighbor.name
-            SKIP $offset
-            LIMIT $limit
-            """
+            where_clause = ""
+
+        # Add WHERE clause if we have conditions
+        if where_clause:
+            query += f"\nWHERE {where_clause}"
+
+        # Complete the query with the common parts
+        query += """
+        RETURN neighbor.uuid as uuid, neighbor.name as name,
+            neighbor.node_type as node_type, neighbor.description as description,
+            neighbor.node_type_rank as node_type_rank,
+            neighbor.date_range_start as date_range_start,
+            neighbor.date_range_end as date_range_end,
+            neighbor.vector_embedding as vector_embedding
+        ORDER BY neighbor.name
+        SKIP $offset
+        LIMIT $limit
+        """
 
         try:
             results = self.db.run_query(query, {"uuid": uuid, "limit": limit, "offset": offset})
@@ -390,6 +491,10 @@ class NodeDatabase:
 
         Returns:
             bool: True if successful, False otherwise
+
+        Raises:
+            ValueError: If the existing index dimensions do not match the expected dimensions
+            Exception: If any error occurs during index creation
         """
         try:
             # Check if index exists using the correct syntax
@@ -401,7 +506,21 @@ class NodeDatabase:
 
             # If results are returned, the index exists
             if result and len(result) > 0:
-                logger.info("Vector index already exists")
+                # Check dimensions of existing index
+                existing_index = result[0]
+                if (
+                    "indexConfig" in existing_index
+                    and "vector.dimensions" in existing_index["indexConfig"]
+                ):
+                    existing_dimensions = existing_index["indexConfig"]["vector.dimensions"]
+                    if existing_dimensions != VECTOR_DIMENSION:
+                        error_msg = (
+                            f"Vector index dimension mismatch: Expected {VECTOR_DIMENSION}"
+                            f" but found {existing_dimensions}. Consider redeploying your database."
+                        )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
+                logger.info("Vector index already exists with correct dimensions")
                 return True
 
             # Create vector index with IF NOT EXISTS to make it idempotent

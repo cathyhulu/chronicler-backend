@@ -9,6 +9,7 @@ from strawberry.fastapi import GraphQLRouter
 
 from chronicler_backend.db.neo4j import Neo4jDatabase, get_db
 from chronicler_backend.db.node import NodeDatabase
+from chronicler_backend.embeddings.api import load_model_on_startup
 from chronicler_backend.graphql.schema import schema
 from chronicler_backend.utils.logging import get_logger
 
@@ -43,6 +44,11 @@ async def lifespan(app: FastAPI):
             logger.warning("Failed to set up vector index")
     except Exception as e:
         logger.warning(f"Error setting up vector index: {e}")
+
+    # Start loading the model in the background during startup
+    logger.info("Loading sentence transformer model...")
+    load_model_on_startup()
+    logger.info("Model loading initiated")
 
     yield
     # Shutdown: Add any cleanup here

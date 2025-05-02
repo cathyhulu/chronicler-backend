@@ -2,29 +2,59 @@
 
 import enum
 from datetime import datetime
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
 import strawberry
 from strawberry.types import Info
 
 from chronicler_backend.db.node import NodeDatabase
+from chronicler_backend.embeddings.api import get_model_manager
 from chronicler_backend.models.node import DateRange as ModelDateRange
 from chronicler_backend.models.node import NodeType as ModelNodeType
+from chronicler_backend.models.node import RelationshipType as ModelRelationshipType
+from chronicler_backend.utils.constants import TRUNCATE_DESCRIPTION_LENGTH
+from chronicler_backend.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Auto-generate NodeType enum for GraphQL from the model definition
 # Create the enum dynamically based on the model's NodeType
 NodeTypeDict = {node_type.name: node_type.name for node_type in ModelNodeType}
-NodeType = strawberry.enum(enum.Enum("NodeType", NodeTypeDict))
+NodeType = strawberry.enum(
+    enum.Enum("NodeType", NodeTypeDict), description="Types of nodes in the knowledge graph"
+)
+
+# Auto-generate RelationshipType enum for GraphQL from the model definition
+RelationshipTypeDict = {rel_type.name: rel_type.value for rel_type in ModelRelationshipType}
+RelationshipType = strawberry.enum(
+    enum.Enum("RelationshipType", RelationshipTypeDict),
+    description="Types of relationships between nodes in the knowledge graph",
+)
+
+
+# Define rank filter enum options
+@strawberry.enum(description="Options for filtering nodes by their hierarchical rank")
+class RankFilterType(enum.Enum):
+    """Enum for rank filter options when querying node neighbors."""
+
+    HIGHER = "higher"
+    LOWER = "lower"
+    HIGHER_EQUAL = "higher_equal"
+    LOWER_EQUAL = "lower_equal"
 
 
 # Auto-generate DateRange type for GraphQL from the model definition
-@strawberry.type
+@strawberry.type(description="Date range with optional start and end dates")
 class DateRange:
     """Date range type for GraphQL, auto-generated from model definition."""
 
     # Match the fields from ModelDateRange
-    start: Optional[datetime] = None
-    end: Optional[datetime] = None
+    start: Optional[datetime] = strawberry.field(
+        default=None, description="Start date of the range (optional)"
+    )
+    end: Optional[datetime] = strawberry.field(
+        default=None, description="End date of the range (optional)"
+    )
 
     @classmethod
     def from_model(cls, model_date_range: Optional[ModelDateRange]) -> Optional["DateRange"]:
@@ -41,24 +71,53 @@ class DateRange:
         return cls(start=model_date_range.start, end=model_date_range.end)
 
 
-@strawberry.type
+@strawberry.type(description="Node in the knowledge graph representing an entity or event")
 class Node:
     """Node type for GraphQL API."""
 
-    uuid: str
-    name: str
-    node_type: NodeType
-    description: Optional[str] = None
-    date_range: Optional[DateRange] = None
-    hierarchy_rank: int
+    uuid: str = strawberry.field(description="Unique identifier for the node")
+    name: str = strawberry.field(description="Name of the node")
+    node_type: NodeType = strawberry.field(description="Type of the node (e.g., PERSON, EVENT)")
+    description: Optional[str] = strawberry.field(
+        default=None, description="Detailed description of the node"
+    )
+    date_range: Optional[DateRange] = strawberry.field(
+        default=None, description="Time period associated with this node"
+    )
+    hierarchy_rank: int = strawberry.field(
+        description="Hierarchical rank in the knowledge grap (higher is more important)"
+    )
 
 
-@strawberry.type
+@strawberry.type(description="Root query operations for the Chronicler API")
 class Query:
     """Root query type for GraphQL API."""
 
-    @strawberry.field
-    def node(self, info: Info, uuid: str) -> Optional[Node]:
+    @strawberry.field(
+        description=(
+            "Get the maximum description length (in characters)"
+            " before truncation for vector embeddings"
+        )
+    )
+    def max_description_length(self, info: Info) -> int:
+        """Get the maximum description length before truncation for vector embeddings.
+
+        Args:
+            info: GraphQL resolver info with context
+
+        Returns:
+            int: Maximum number of characters before truncation
+        """
+        return TRUNCATE_DESCRIPTION_LENGTH
+
+    @strawberry.field(description="Retrieve a single node by its unique identifier")
+    def node(
+        self,
+        info: Info,
+        uuid: Annotated[
+            str, strawberry.argument(description="Unique identifier of the node to retrieve")
+        ],
+    ) -> Optional[Node]:
         """Query to get a node by UUID.
 
         Args:
@@ -84,8 +143,17 @@ class Query:
             )
         return None
 
-    @strawberry.field
-    def nodes(self, info: Info, limit: int = 10, offset: int = 0) -> List[Node]:
+    @strawberry.field(description="Retrieve a list of all nodes with pagination support")
+    def nodes(
+        self,
+        info: Info,
+        limit: Annotated[
+            int, strawberry.argument(description="Maximum number of nodes to return")
+        ] = 10,
+        offset: Annotated[
+            int, strawberry.argument(description="Number of nodes to skip for pagination")
+        ] = 0,
+    ) -> List[Node]:
         """Query to get all nodes with pagination.
 
         Args:
@@ -115,9 +183,29 @@ class Query:
             for node in nodes
         ]
 
-    @strawberry.field
+    @strawberry.field(description="Retrieve a list of neighbor nodes for a given node")
     def node_neighbors(
-        self, info: Info, uuid: str, same_type_only: bool = True, limit: int = 10, offset: int = 0
+        self,
+        info: Info,
+        uuid: Annotated[
+            str,
+            strawberry.argument(description="Unique identifier of the node to find neighbors for"),
+        ],
+        same_type_only: Annotated[
+            bool, strawberry.argument(description="Filter to only return nodes of the same type")
+        ] = True,
+        rank_filter: Annotated[
+            Optional[RankFilterType],
+            strawberry.argument(
+                description="Filter by node type rank relative to the current node"
+            ),
+        ] = None,
+        limit: Annotated[
+            int, strawberry.argument(description="Maximum number of nodes to return")
+        ] = 10,
+        offset: Annotated[
+            int, strawberry.argument(description="Number of nodes to skip for pagination")
+        ] = 0,
     ) -> List[Node]:
         """Query to get neighbors of a node.
 
@@ -125,6 +213,7 @@ class Query:
             info: GraphQL resolver info with context
             uuid: Node UUID
             same_type_only: Only return nodes of the same type
+            rank_filter: Filter by node type rank relative to the current node
             limit: Maximum number of results
             offset: Offset for pagination
 
@@ -134,8 +223,15 @@ class Query:
         db = info.context["db"]
         node_db = NodeDatabase(db)
 
+        # Convert the enum value to string if rank_filter is provided
+        rank_filter_value = rank_filter.value if rank_filter else None
+
         neighbors = node_db.get_node_neighbors(
-            uuid, same_type_only=same_type_only, limit=limit, offset=offset
+            uuid,
+            same_type_only=same_type_only,
+            rank_filter=rank_filter_value,
+            limit=limit,
+            offset=offset,
         )
 
         # Convert from model to GraphQL type
@@ -151,15 +247,25 @@ class Query:
             for node in neighbors
         ]
 
-    @strawberry.field
+    @strawberry.field(description="Retrieve a list of nodes within a specified date range")
     def nodes_by_date_range(
         self,
         info: Info,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        node_type: Optional[NodeType] = None,
-        limit: int = 10,
-        offset: int = 0,
+        start_date: Annotated[
+            Optional[datetime], strawberry.argument(description="Start date for date range search")
+        ] = None,
+        end_date: Annotated[
+            Optional[datetime], strawberry.argument(description="End date for date range search")
+        ] = None,
+        node_type: Annotated[
+            Optional[NodeType], strawberry.argument(description="Filter results by node type")
+        ] = None,
+        limit: Annotated[
+            int, strawberry.argument(description="Maximum number of nodes to return")
+        ] = 10,
+        offset: Annotated[
+            int, strawberry.argument(description="Number of nodes to skip for pagination")
+        ] = 0,
     ) -> List[Node]:
         """Query nodes by date range.
 
@@ -203,9 +309,19 @@ class Query:
             for node in nodes
         ]
 
-    @strawberry.field
+    @strawberry.field(description="Search nodes by vector similarity")
     def search_nodes_by_vector(
-        self, info: Info, vector: List[float], limit: int = 10, offset: int = 0
+        self,
+        info: Info,
+        vector: Annotated[
+            List[float], strawberry.argument(description="Query vector for similarity search")
+        ],
+        limit: Annotated[
+            int, strawberry.argument(description="Maximum number of nodes to return")
+        ] = 10,
+        offset: Annotated[
+            int, strawberry.argument(description="Number of nodes to skip for pagination")
+        ] = 0,
     ) -> List[Node]:
         """Search nodes by vector similarity.
 
@@ -235,3 +351,63 @@ class Query:
             )
             for node in nodes
         ]
+
+    @strawberry.field(description="Search nodes by semantic similarity to the given text")
+    async def search_nodes_by_text(
+        self,
+        info: Info,
+        search_text: Annotated[
+            str, strawberry.argument(description="Text to search for semantic similarity")
+        ],
+        limit: Annotated[
+            int, strawberry.argument(description="Maximum number of nodes to return")
+        ] = 10,
+        offset: Annotated[
+            int, strawberry.argument(description="Number of nodes to skip for pagination")
+        ] = 0,
+    ) -> List[Node]:
+        """Search nodes by semantic similarity to the given text.
+
+        This query converts the input text to a vector embedding and
+        then performs a vector similarity search.
+
+        Args:
+            info: GraphQL resolver info with context
+            search_text: Text to search for
+            limit: Maximum number of results
+            offset: Offset for pagination
+
+        Returns:
+            List[Node]: List of nodes sorted by semantic similarity
+        """
+        db = info.context["db"]
+        node_db = NodeDatabase(db)
+
+        try:
+            # Get model manager from FastAPI dependency
+            model_manager = await get_model_manager()
+
+            # Generate embedding from search text
+            vector = model_manager.encode(search_text)
+
+            # Search using the vector
+            nodes = node_db.search_nodes_by_vector_similarity(
+                vector=vector, limit=limit, offset=offset
+            )
+
+            # Convert from model to GraphQL type
+            return [
+                Node(
+                    uuid=node.uuid,
+                    name=node.name,
+                    node_type=NodeType[node.node_type.name],
+                    description=node.description,
+                    date_range=DateRange.from_model(node.date_range),
+                    hierarchy_rank=node.node_type.value,
+                )
+                for node in nodes
+            ]
+        except Exception as e:
+            # Log error but don't expose details to client
+            logger.error(f"Error in search_nodes_by_text: {e}")
+            return []

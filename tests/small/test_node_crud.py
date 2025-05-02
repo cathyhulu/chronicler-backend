@@ -2,12 +2,22 @@
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from chronicler_backend.db.node import NodeDatabase
 from chronicler_backend.models.node import DateRange, Node, NodeType, RelationshipType
 from chronicler_backend.utils.constants import VECTOR_DIMENSION
 
 
-def test_node_crud_operations(neo4j_db):
+def test_connection(neo4j_db):
+    """Test Neo4j connection."""
+    # Use return_single parameter to get the result directly
+    result = neo4j_db.run_query("RETURN 1 AS one", return_single=True)
+    assert result["one"] == 1
+
+
+@pytest.mark.asyncio
+async def test_node_crud_operations(neo4j_db):
     """Test basic CRUD operations for nodes."""
     # Create a NodeDatabase instance
     node_db = NodeDatabase(neo4j_db)
@@ -21,7 +31,7 @@ def test_node_crud_operations(neo4j_db):
     )
 
     # Create the node
-    created_node = node_db.create_node(test_node)
+    created_node = await node_db.create_node(test_node)
     assert created_node is not None
     assert created_node.uuid == test_node.uuid
     assert created_node.name == "World War II"
@@ -40,7 +50,7 @@ def test_node_crud_operations(neo4j_db):
 
     # Update the node
     retrieved_node.description = "Updated description for WWII"
-    updated_node = node_db.update_node(retrieved_node)
+    updated_node = await node_db.update_node(retrieved_node)
     assert updated_node is not None
     assert updated_node.description == "Updated description for WWII"
 
@@ -52,7 +62,8 @@ def test_node_crud_operations(neo4j_db):
     assert node_db.get_node(created_node.uuid) is None
 
 
-def test_node_relationships(neo4j_db):
+@pytest.mark.asyncio
+async def test_node_relationships(neo4j_db):
     """Test relationships between nodes."""
     # Create a NodeDatabase instance
     node_db = NodeDatabase(neo4j_db)
@@ -61,7 +72,10 @@ def test_node_relationships(neo4j_db):
     country = Node(
         name="United States", node_type=NodeType.COUNTRY, description="North American nation"
     )
-    created_country = node_db.create_node(country)
+    created_country = await node_db.create_node(country)
+
+    country2 = Node(name="Canada", node_type=NodeType.COUNTRY, description="North American nation")
+    created_country2 = await node_db.create_node(country2)
 
     # Create two child nodes (battles)
     battle1 = Node(
@@ -70,7 +84,7 @@ def test_node_relationships(neo4j_db):
         description="Naval battle in the Pacific Theater",
         date_range=DateRange(start=datetime(1942, 6, 4), end=datetime(1942, 6, 7)),
     )
-    created_battle1 = node_db.create_node(battle1)
+    created_battle1 = await node_db.create_node(battle1)
 
     battle2 = Node(
         name="D-Day",
@@ -78,47 +92,88 @@ def test_node_relationships(neo4j_db):
         description="Allied invasion of Normandy",
         date_range=DateRange(start=datetime(1944, 6, 6), end=datetime(1944, 6, 6)),
     )
-    created_battle2 = node_db.create_node(battle2)
+    created_battle2 = await node_db.create_node(battle2)
+
+    # Create a city node (lower rank than country)
+    city = Node(
+        name="Washington D.C.",
+        node_type=NodeType.CITY,
+        description="Capital city of the United States",
+    )
+    created_city = await node_db.create_node(city)
 
     # Create relationships using the new relationship type enum
+    assert node_db.create_relationship(
+        created_country.uuid, created_country2.uuid, RelationshipType.BORDERS
+    )
     assert node_db.create_relationship(
         created_country.uuid, created_battle1.uuid, RelationshipType.PARTICIPATED_IN
     )
     assert node_db.create_relationship(
         created_country.uuid, created_battle2.uuid, RelationshipType.PARTICIPATED_IN
     )
+    assert node_db.create_relationship(
+        created_country.uuid, created_city.uuid, RelationshipType.CONTAINS
+    )
 
     # Test getting relationships
     country_relationships = node_db.get_relationships(created_country.uuid, direction="OUTGOING")
-    assert len(country_relationships) == 2
+    assert len(country_relationships) == 4
 
     # Check relationship types
-    rel_types = [r["relationship_type"] for r in country_relationships]
-    assert all(rel_type == RelationshipType.PARTICIPATED_IN.value for rel_type in rel_types)
+    battle_rel_types = [
+        r["relationship_type"]
+        for r in country_relationships
+        if r["other_node_uuid"] in [created_battle1.uuid, created_battle2.uuid]
+    ]
+    assert all(rel_type == RelationshipType.PARTICIPATED_IN.value for rel_type in battle_rel_types)
 
-    # Check that related nodes are the battles
+    # Check that related nodes are the battles and city
     related_nodes = [r["other_node_uuid"] for r in country_relationships]
     assert created_battle1.uuid in related_nodes
     assert created_battle2.uuid in related_nodes
+    assert created_city.uuid in related_nodes
+    assert created_country2.uuid in related_nodes
 
-    # Get neighbors - should find both battles
+    # Get neighbors - should find both battles and the city
     neighbors = node_db.get_node_neighbors(created_country.uuid, same_type_only=False)
-    assert len(neighbors) == 2
+    assert len(neighbors) == 4
     neighbor_names = [n.name for n in neighbors]
     assert "Battle of Midway" in neighbor_names
     assert "D-Day" in neighbor_names
+    assert "Washington D.C." in neighbor_names
+    assert "Canada" in neighbor_names
 
-    # Get neighbors of same type - should find none since there are no other countries
+    # Get neighbors of same type - should find 1 country
     same_type_neighbors = node_db.get_node_neighbors(created_country.uuid, same_type_only=True)
-    assert len(same_type_neighbors) == 0
+    assert len(same_type_neighbors) == 1
+    assert same_type_neighbors[0].name == "Canada"
+
+    # Test rank filtering - lower (should find battles and city)
+    lower_rank_neighbors = node_db.get_node_neighbors(
+        created_country.uuid, same_type_only=False, rank_filter="lower"
+    )
+    assert len(lower_rank_neighbors) == 3
+    neighbor_names = [n.name for n in neighbors]
+    assert "Battle of Midway" in neighbor_names
+    assert "D-Day" in neighbor_names
+    assert "Washington D.C." in neighbor_names
+
+    # Test rank filtering - higher (should find nothing)
+    higher_equal_neighbors = node_db.get_node_neighbors(
+        created_country.uuid, same_type_only=False, rank_filter="higher"
+    )
+    assert len(higher_equal_neighbors) == 0
 
     # Clean up
     node_db.delete_node(created_battle1.uuid)
     node_db.delete_node(created_battle2.uuid)
+    node_db.delete_node(created_city.uuid)
     node_db.delete_node(created_country.uuid)
 
 
-def test_search_by_date_range(neo4j_db):
+@pytest.mark.asyncio
+async def test_search_by_date_range(neo4j_db):
     """Test searching nodes by date range."""
     node_db = NodeDatabase(neo4j_db)
 
@@ -135,7 +190,7 @@ def test_search_by_date_range(neo4j_db):
             end=now - timedelta(days=3600),  # ~9.9 years ago
         ),
     )
-    node_db.create_node(past_event)
+    await node_db.create_node(past_event)
 
     # Recent event
     recent_event = Node(
@@ -147,7 +202,7 @@ def test_search_by_date_range(neo4j_db):
             end=now - timedelta(days=25),  # 25 days ago
         ),
     )
-    node_db.create_node(recent_event)
+    await node_db.create_node(recent_event)
 
     # Ongoing event
     ongoing_event = Node(
@@ -159,7 +214,7 @@ def test_search_by_date_range(neo4j_db):
             end=now + timedelta(days=10),  # 10 days in future
         ),
     )
-    node_db.create_node(ongoing_event)
+    await node_db.create_node(ongoing_event)
 
     # Future event
     future_event = Node(
@@ -171,7 +226,7 @@ def test_search_by_date_range(neo4j_db):
             end=now + timedelta(days=40),  # 40 days in future
         ),
     )
-    node_db.create_node(future_event)
+    await node_db.create_node(future_event)
 
     try:
         # Search for current events (should find ongoing)
@@ -203,7 +258,8 @@ def test_search_by_date_range(neo4j_db):
             node_db.delete_node(node.uuid)
 
 
-def test_vector_index_and_similarity_search(neo4j_db):
+@pytest.mark.asyncio
+async def test_vector_index_and_similarity_search(neo4j_db):
     """Test vector index setup and similarity search functionality."""
     # Create a NodeDatabase instance
     node_db = NodeDatabase(neo4j_db)
@@ -219,9 +275,10 @@ def test_vector_index_and_similarity_search(neo4j_db):
         description="Civil war fought in the United States from 1861 to 1865",
         date_range=DateRange(start=datetime(1861, 4, 12), end=datetime(1865, 5, 9)),
         # Simple test vector - mostly 1s in first half, 0s in second half
-        vector_embedding=[1.0] * (VECTOR_DIMENSION // 2) + [0.0] * (VECTOR_DIMENSION // 2),
+        vector_embedding=[1.0] * (VECTOR_DIMENSION // 2)
+        + [0.0] * (VECTOR_DIMENSION - VECTOR_DIMENSION // 2),
     )
-    created_history = node_db.create_node(history_node)
+    created_history = await node_db.create_node(history_node)
     assert created_history is not None
 
     # Node 2 - Similar to Node 1 (high similarity)
@@ -231,9 +288,10 @@ def test_vector_index_and_similarity_search(neo4j_db):
         description="Major battle of the American Civil War",
         date_range=DateRange(start=datetime(1863, 7, 1), end=datetime(1863, 7, 3)),
         # Similar vector - mostly 1s in first half, small values in second half
-        vector_embedding=[1.0] * (VECTOR_DIMENSION // 2) + [0.1] * (VECTOR_DIMENSION // 2),
+        vector_embedding=[1.0] * (VECTOR_DIMENSION // 2)
+        + [0.1] * (VECTOR_DIMENSION - VECTOR_DIMENSION // 2),
     )
-    created_similar = node_db.create_node(similar_history_node)
+    created_similar = await node_db.create_node(similar_history_node)
     assert created_similar is not None
 
     # Node 3 - Different topic node (low similarity)
@@ -243,14 +301,17 @@ def test_vector_index_and_similarity_search(neo4j_db):
         description="Major scientific breakthrough",
         date_range=DateRange(start=datetime(1945, 1, 1), end=datetime(1945, 12, 31)),
         # Different vector - 0s in first half, 1s in second half
-        vector_embedding=[0.0] * (VECTOR_DIMENSION // 2) + [1.0] * (VECTOR_DIMENSION // 2),
+        vector_embedding=[0.0] * (VECTOR_DIMENSION // 2)
+        + [1.0] * (VECTOR_DIMENSION - VECTOR_DIMENSION // 2),
     )
-    created_different = node_db.create_node(different_node)
+    created_different = await node_db.create_node(different_node)
     assert created_different is not None
 
     try:
         # Search with a vector similar to the history nodes
-        query_vector = [0.9] * (VECTOR_DIMENSION // 2) + [0.1] * (VECTOR_DIMENSION // 2)
+        query_vector = [0.9] * (VECTOR_DIMENSION // 2) + [0.1] * (
+            VECTOR_DIMENSION - VECTOR_DIMENSION // 2
+        )
         results = node_db.search_nodes_by_vector_similarity(query_vector, limit=3)
 
         # We should get at least 2 results

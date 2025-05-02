@@ -1,10 +1,12 @@
 .PHONY: clean docker-up docker-down docker-clean docker-deep-clean docker-build docker-logs docker-status \
 		docker-shell docker-test docker-test-small docker-test-medium docker-test-large \
 		format isort black flake8 pylint neo4j-shell neo4j-test-shell scripts-executable \
-		podman-check
+		podman-check download-model-local download-model-docker
 
 SOURCE_DIR=./src
 SOURCE_PATH=./src/chronicler-backend
+MODEL_DIR=./model_weights
+MODEL_PATH=./model_weights/quantized-model
 TESTS_DIR=./tests
 PYTEST_LOG_LEVEL=DEBUG
 PYTEST_COV_MIN=50
@@ -112,12 +114,15 @@ setup-dev: scripts-executable
 # ++++++++++++++++++++++++
 setup-local-dev:
 	@echo "Setting up local development environment..."
+	@echo "Creating virtual environment..."
 	uv venv
 	uv pip install -e .[dev,test]
+	@echo "Installing pre-commit hooks..."
 	uv run pre-commit install
 	@echo "Local development environment ready!"
 	@echo "Note: You'll still need Neo4j running for database operations"
 	@echo "Consider 'make neo4j-only' for just the Neo4j service if needed"
+	@echo "You also may need to download the model locally using 'make download-model-local'"
 
 # ++++++++++++++++++++++++
 # Docker Compose Commands
@@ -180,7 +185,7 @@ docker-deep-clean: docker-down
 
 # Rebuild all services with Docker Compose
 docker-build: podman-check
-	$(COMPOSE_CMD) build
+	$(COMPOSE_CMD) --progress=plain build
 	@echo "All services rebuilt with Docker Compose"
 
 # Rebuild and restart all services
@@ -208,19 +213,21 @@ neo4j-test-shell: podman-check
 	$(DOCKER_CMD) exec -it chronicler-neo4j-test cypher-shell \
 	-u $(NEO4J_TEST_USER) -p $(NEO4J_TEST_PASSWORD)
 
-# Check Python version in the container
-docker-python-version: podman-check
-	$(DOCKER_CMD) exec -it chronicler-backend python --version
+# Check Docker image sizes
+docker-size: podman-check
+	@echo "Checking Docker image sizes..."
+	@echo "--------------------------------"
+	@$(DOCKER_CMD) images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep -E 'chronicler|REPOSITORY'
+	@echo "--------------------------------"
+	@echo "Total disk space used by Docker:"
+	@$(DOCKER_CMD) system df
 
-# Check UV version in the container
-docker-uv-version: podman-check
-	$(DOCKER_CMD) exec -it chronicler-backend uv --version
 
 # +++++++ +++++++ +++++++
 # Sized testing
 # +++++++ +++++++ +++++++
 define run_tests
-	export PYTHONPATH=${SOURCE_DIR} && \
+	@mkdir -p logs
 	$(DOCKER_CMD) exec -it chronicler-backend /bin/bash -c " \
 		uv run coverage run --data-file=/app/logs/.coverage --source=${SOURCE_DIR} --omit=\"*/tests/*\" \
 		-m pytest -rs -vv --log-level=${PYTEST_LOG_LEVEL} $1" \
@@ -235,19 +242,15 @@ define run_tests
 endef
 
 test-all: podman-check
-	@mkdir -p logs
-	clear && $(call run_tests,${TESTS_DIR},${PYTEST_COV_MIN})
+	$(call run_tests,${TESTS_DIR},${PYTEST_COV_MIN})
 
 test-small: podman-check
-	@mkdir -p logs
 	$(call run_tests,${TESTS_DIR}/small)
 
 test-medium: podman-check
-	@mkdir -p logs
 	$(call run_tests,${TESTS_DIR}/medium)
 
 test-large: podman-check
-	@mkdir -p logs
 	$(call run_tests,${TESTS_DIR}/large)
 
 test-module: podman-check
@@ -266,3 +269,31 @@ ifndef TEST_CASE
 endif
 	@mkdir -p logs
 	$(call run_tests,$(TEST_PATH) -k "$(TEST_CASE)")
+
+# ++++++++++++++++++++++++
+# Model Management
+# ++++++++++++++++++++++++
+# Download and quantize the sentence transformer model locally
+# Usage: make download-model-local [force=true]
+# force=true will force the download even if the model already exists
+download-model-local:
+	@echo "Downloading and quantizing sentence transformer model locally..."
+	@mkdir -p $(MODEL_DIR) && \
+	uv run scripts/download_model.py --output-dir $(MODEL_PATH) $(if $(filter true,$(force)),--force,)
+
+# Download and quantize the sentence transformer model within the Docker container
+download-model-docker: podman-check
+	@echo "Checking for existing model files..."
+	@if [ -d "$(MODEL_PATH)" ] && [ "$$(ls -A $(MODEL_PATH) 2>/dev/null)" ]; then \
+		echo "Found existing model files, copying to container..."; \
+		MODEL_PATH_DOCKER=$$(echo $(MODEL_PATH) | sed 's|^\./|/app/|'); \
+		$(DOCKER_CMD) exec -it chronicler-backend bash -c "mkdir -p $$MODEL_PATH_DOCKER"; \
+		$(DOCKER_CMD) cp $(MODEL_PATH)/. chronicler-backend:$$MODEL_PATH_DOCKER/; \
+		echo "Model files copied to container!"; \
+	else \
+		echo "No existing model found. Downloading and quantizing in container..."; \
+		MODEL_PATH_DOCKER=$$(echo $(MODEL_PATH) | sed 's|^\./|/app/|'); \
+		$(DOCKER_CMD) exec -it chronicler-backend bash -c "mkdir -p $$MODEL_PATH_DOCKER \
+		&& MODEL_PATH=$$MODEL_PATH_DOCKER uv run /app/scripts/download_model.py"; \
+	fi
+	@echo "Model setup complete!"

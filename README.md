@@ -2,6 +2,18 @@
 
 A GraphQL API for [chronicler](https://github.com/cathyhulu/chronicler) with Neo4j database integration.
 
+## Overview
+
+Chronicler-backend is a knowledge graph system for historical events and narratives. Historical events are stored on a Neo4j knowledge graph, where a sentence transformer model generates vector embeddings for semantic search capabilities. The system features:
+
+- **Knowledge Graph Storage**: Historical events, people, places, and their relationships are modeled as interconnected nodes in a Neo4j graph database, enabling complex queries across linked data
+- **Vector Embeddings**: Utilizes optimized and quantized sentence transformer models to generate semantic vector representations of textual content
+- **Semantic Search**: Find historically related entities and events based on semantic meaning rather than just keyword matching
+- **GraphQL API**: Flexible, strongly-typed API that allows for precise queries and mutations with minimal over-fetching
+- **Scalable Architecture**: Containerized deployment with Docker/Podman for consistent development and production environments
+
+This backend powers historical data exploration and visualization, allowing users to discover connections between historical events, people, and places through both explicit relationships and semantic similarity.
+
 ## Getting Started
 
 ### Prerequisites
@@ -32,12 +44,6 @@ A GraphQL API for [chronicler](https://github.com/cathyhulu/chronicler) with Neo
    - GraphiQL interface: http://localhost:8000/graphql
    - Neo4j Browser: http://localhost:7474 (Define username and password `.env`)
 
-## Alternative: Local Development
-
-For a simpler development workflow (especially for IDE integration)
-
-1) Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-2) Run `make setup-local-dev` to create a venv and install dependencies
 
 ## Development Workflow
 
@@ -88,34 +94,13 @@ make docker-shell
 - Run specific module: `make test-module TEST_PATH=tests/small/test_module.py`
 - Run specific test: `make test-case TEST_PATH=tests/small/test_module.py TEST_CASE="test_function"`
 
-### Local Development (Simpler Option)
+### Local Development
 
-For a more straightforward workflow with better IDE integration:
+For installation of just python dependencies (largely for IDE integration)
 
-```bash
-# Set up local virtual environment
-make setup-local-dev
+1) Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+2) Run `make-setup-local-dev`
 
-# Start just the Neo4j services
-make neo4j-only
-
-# Run linting locally
-uv run black .
-uv run isort .
-uv run flake8
-uv run pylint **/*.py
-
-# Run tests locally
-PYTHONPATH=./src uv run pytest tests/small
-```
-
-This approach provides:
-- Faster development cycles
-- Simpler IDE integration (code navigation, autocomplete)
-- Native execution of pre-commit hooks
-- Local control of Python tooling
-
-**Note:** You'll still need Neo4j running for database operations. Use `make neo4j-only` to start just the database containers.
 
 ### Database Access
 
@@ -153,14 +138,31 @@ For development container users:
 ├── src/                           # Source code
 │   └── chronicler_backend/
 │       ├── main.py                # FastAPI application with API endpoints
-│       ├── db/                    # Neo4j database integration and connection management   
-│       └── graphql/               # Strawberry GraphQL schema with types, queries and mutations      
+│       ├── db/                    # Neo4j database integration and connection management
+│       │   ├── neo4j.py           # Neo4j database connection and session management
+│       │   └── node.py            # Node database operations and queries
+│       ├── embeddings/            # Vector embedding functionality
+│       │   ├── api.py             # Public API for embeddings
+│       │   └── manager.py         # ModelManager for handling embeddings generation
+│       ├── graphql/               # Strawberry GraphQL schema with types, queries and mutations
+│       │   ├── mutation.py        # GraphQL mutation definitions
+│       │   ├── query.py           # GraphQL query definitions
+│       │   └── schema.py          # Main GraphQL schema configuration
+│       ├── models/                # Data models and types
+│       │   └── node.py            # Node model definitions and enums
+│       └── utils/                 # Utility functions
+│           ├── constants.py       # Application constants
+│           └── logging.py         # Logging configuration
 ├── tests/                         # Tests
-│   ├── small/                     # Small unit tests
-│   ├── medium/                    # Medium integration tests
-│   ├── large/                     # Large system tests
+│   ├── small/                     # Small unit tests (fast, no external dependencies)
+│   ├── medium/                    # Medium integration tests (DB interactions)
+│   ├── large/                     # Large system tests (full API)
 │   └── conftest.py                # Pytest fixtures and configuration
+├── model_weights/                 # Directory for storing ML model weights
+│   └── quantized-model/           # Quantized sentence transformer models
 ├── scripts/                       # Utility scripts
+│   ├── download_model.py          # Script to download and quantize ML models
+│   ├── entrypoint.sh              # Docker container entrypoint
 │   ├── run-in-container.sh        # Script to run commands in Docker/Podman container
 │   └── precommit-docker-check.sh  # Pre-commit hook to verify container status
 ├── logs/                          # Log files (gitignored)
@@ -169,6 +171,7 @@ For development container users:
 ├── Dockerfile                     # Dockerfile for FastAPI application
 ├── Makefile                       # Makefile with development commands
 ├── pyproject.toml                 # Project dependencies and configuration
+├── TODO.md                        # Project task list and goals
 └── README.md                      # Project documentation
 ```
 
