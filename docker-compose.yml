@@ -68,25 +68,16 @@ services:
       - FASTAPI_PORT=${FASTAPI_PORT:-8000}
       - FASTAPI_RELOAD=${FASTAPI_RELOAD:-true}
       - FASTAPI_DEBUG=${FASTAPI_DEBUG:-true}
+      - ENV=${ENV:-development}
     volumes:
       - .:/app
       - api_packages:/app/.venv
+      - model_weights:/app/model_weights
     depends_on:
       neo4j:
         condition: service_healthy
     networks:
       - chronicler-network
-    command: >
-      sh -c "
-        . /app/.venv/bin/activate &&
-        if [ \"${ENV}\" = \"development\" ] || [ \"${ENV}\" = \"local\" ]; then
-          echo \"Starting in development mode with hot reload\" &&
-          uvicorn src.chronicler_backend.main:app --host 0.0.0.0 --port 8000 --reload;
-        else
-          echo \"Starting in production mode\" &&
-          uvicorn src.chronicler_backend.main:app --host 0.0.0.0 --port 8000;
-        fi
-      "
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -102,4 +93,6 @@ volumes:
   neo4j_data:
     driver: local
   api_packages:
+    driver: local
+  model_weights:
     driver: local

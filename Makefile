@@ -225,6 +225,7 @@ docker-uv-version: podman-check
 # Sized testing
 # +++++++ +++++++ +++++++
 define run_tests
+	@mkdir -p logs
 	export PYTHONPATH=${SOURCE_DIR} && \
 	$(DOCKER_CMD) exec -it chronicler-backend /bin/bash -c " \
 		uv run coverage run --data-file=/app/logs/.coverage --source=${SOURCE_DIR} --omit=\"*/tests/*\" \
@@ -240,19 +241,15 @@ define run_tests
 endef
 
 test-all: podman-check
-	@mkdir -p logs
 	$(call run_tests,${TESTS_DIR},${PYTEST_COV_MIN})
 
 test-small: podman-check
-	@mkdir -p logs
 	$(call run_tests,${TESTS_DIR}/small)
 
 test-medium: podman-check
-	@mkdir -p logs
 	$(call run_tests,${TESTS_DIR}/medium)
 
 test-large: podman-check
-	@mkdir -p logs
 	$(call run_tests,${TESTS_DIR}/large)
 
 test-module: podman-check
