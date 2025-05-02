@@ -228,7 +228,6 @@ docker-size: podman-check
 # +++++++ +++++++ +++++++
 define run_tests
 	@mkdir -p logs
-	export PYTHONPATH=${SOURCE_DIR} && \
 	$(DOCKER_CMD) exec -it chronicler-backend /bin/bash -c " \
 		uv run coverage run --data-file=/app/logs/.coverage --source=${SOURCE_DIR} --omit=\"*/tests/*\" \
 		-m pytest -rs -vv --log-level=${PYTEST_LOG_LEVEL} $1" \

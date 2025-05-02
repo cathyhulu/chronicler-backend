@@ -44,12 +44,6 @@ This backend powers historical data exploration and visualization, allowing user
    - GraphiQL interface: http://localhost:8000/graphql
    - Neo4j Browser: http://localhost:7474 (Define username and password `.env`)
 
-## Alternative: Local Development
-
-For a simpler development workflow (especially for IDE integration)
-
-1) Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-2) Run `make setup-local-dev` to create a venv and install dependencies
 
 ## Development Workflow
 
@@ -100,34 +94,13 @@ make docker-shell
 - Run specific module: `make test-module TEST_PATH=tests/small/test_module.py`
 - Run specific test: `make test-case TEST_PATH=tests/small/test_module.py TEST_CASE="test_function"`
 
-### Local Development (Simpler Option)
+### Local Development
 
-For a more straightforward workflow with better IDE integration:
+For installation of just python dependencies (largely for IDE integration)
 
-```bash
-# Set up local virtual environment
-make setup-local-dev
+1) Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+2) Run `make-setup-local-dev`
 
-# Start just the Neo4j services
-make neo4j-only
-
-# Run linting locally
-uv run black .
-uv run isort .
-uv run flake8
-uv run pylint **/*.py
-
-# Run tests locally
-PYTHONPATH=./src uv run pytest tests/small
-```
-
-This approach provides:
-- Faster development cycles
-- Simpler IDE integration (code navigation, autocomplete)
-- Native execution of pre-commit hooks
-- Local control of Python tooling
-
-**Note:** You'll still need Neo4j running for database operations. Use `make neo4j-only` to start just the database containers.
 
 ### Database Access
 
