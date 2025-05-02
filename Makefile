@@ -213,13 +213,15 @@ neo4j-test-shell: podman-check
 	$(DOCKER_CMD) exec -it chronicler-neo4j-test cypher-shell \
 	-u $(NEO4J_TEST_USER) -p $(NEO4J_TEST_PASSWORD)
 
-# Check Python version in the container
-docker-python-version: podman-check
-	$(DOCKER_CMD) exec -it chronicler-backend python --version
+# Check Docker image sizes
+docker-size: podman-check
+	@echo "Checking Docker image sizes..."
+	@echo "--------------------------------"
+	@$(DOCKER_CMD) images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep -E 'chronicler|REPOSITORY'
+	@echo "--------------------------------"
+	@echo "Total disk space used by Docker:"
+	@$(DOCKER_CMD) system df
 
-# Check UV version in the container
-docker-uv-version: podman-check
-	$(DOCKER_CMD) exec -it chronicler-backend uv --version
 
 # +++++++ +++++++ +++++++
 # Sized testing
