@@ -49,7 +49,7 @@ class ModelManager(metaclass=SingletonMeta):
         model_path: Optional[str] = None,
         quantized: bool = True,
         backend: str = "onnx",
-        verbose: bool = True,
+        verbose: bool = False,
     ) -> None:
         """
         Load the sentence transformer model with ONNX backend.
