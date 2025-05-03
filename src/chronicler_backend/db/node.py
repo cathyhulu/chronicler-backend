@@ -520,7 +520,16 @@ class NodeDatabase:
                         )
                         logger.error(error_msg)
                         raise ValueError(error_msg)
-                logger.info("Vector index already exists with correct dimensions")
+                else:
+                    error_msg = (
+                        "Vector index exists but dimensions not found in indexConfig. "
+                        "Consider redeploying your database."
+                    )
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+                logger.info(
+                    f"Vector index already exists with correct dimensions: {VECTOR_DIMENSION}"
+                )
                 return True
 
             # Create vector index with IF NOT EXISTS to make it idempotent
