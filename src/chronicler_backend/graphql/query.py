@@ -89,6 +89,15 @@ class Node:
     )
 
 
+@strawberry.type(description="Relationship between nodes in the knowledge graph")
+class NodeRelationship:
+    """NodeRelationship type for GraphQL API."""
+
+    sourceNodeUUID: str = strawberry.field(description="UUID of the source node")
+    targetNodeUUID: str = strawberry.field(description="UUID of the target node")
+    relationshipType: str = strawberry.field(description="Type of the relationship")
+
+
 @strawberry.type(description="Root query operations for the Chronicler API")
 class Query:
     """Root query type for GraphQL API."""
@@ -411,3 +420,43 @@ class Query:
             # Log error but don't expose details to client
             logger.error(f"Error in search_nodes_by_text: {e}")
             return []
+
+    @strawberry.field(description="Retrieve relationships for a specific node")
+    def node_relationships(
+        self,
+        info: Info,
+        uuid: Annotated[
+            str, strawberry.argument(description="UUID of the node to get relationships for")
+        ],
+        limit: Annotated[
+            int, strawberry.argument(description="Maximum number of relationships to return")
+        ] = 10,
+        offset: Annotated[
+            int, strawberry.argument(description="Number of relationships to skip for pagination")
+        ] = 0,
+    ) -> List[NodeRelationship]:
+        """Query to get all relationships for a node.
+
+        Args:
+            info: GraphQL resolver info with context
+            uuid: Node UUID
+            limit: Maximum number of results
+            offset: Offset for pagination
+
+        Returns:
+            List[NodeRelationship]: List of relationships for the node
+        """
+        db = info.context["db"]
+        node_db = NodeDatabase(db)
+
+        relationships = node_db.get_relationships(uuid, limit=limit, offset=offset)
+
+        # Convert from database result to GraphQL type
+        return [
+            NodeRelationship(
+                sourceNodeUUID=uuid if rel["direction"] == "OUTGOING" else rel["other_node_uuid"],
+                targetNodeUUID=rel["other_node_uuid"] if rel["direction"] == "OUTGOING" else uuid,
+                relationshipType=rel["relationship_type"],
+            )
+            for rel in relationships
+        ]

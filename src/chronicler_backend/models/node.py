@@ -19,6 +19,7 @@ class NodeType(IntEnum):
     Higher integer values represent higher hierarchical importance.
     """
 
+    ENTITY = 5
     EVENT = 10
     BATTLE = 20
     WAR = 30
