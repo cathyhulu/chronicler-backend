@@ -10,7 +10,7 @@ from datetime import datetime
 import pytest
 
 from chronicler_backend.graphql.schema import schema
-from chronicler_backend.models.node import DateRange, Node, NodeType
+from chronicler_backend.models.node import DateRange, Node, NodeType, RelationshipType
 from chronicler_backend.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -415,3 +415,114 @@ class TestGraphQLSchemaExecution:
         finally:
             # Clean up
             node_db.delete_node(node_uuid)
+
+    @pytest.mark.asyncio
+    async def test_node_relationships(self, neo4j_db, node_db):
+        """Test getting node relationships via GraphQL."""
+        # Create three nodes with relationships between them
+
+        # Create first node - a historical event
+        event_node = Node(
+            name="World War II",
+            node_type=NodeType.EVENT,
+            description="Global conflict from 1939 to 1945",
+            date_range=DateRange(start=datetime(1939, 9, 1), end=datetime(1945, 9, 2)),
+        )
+
+        # Create second node - a battle within that event
+        battle_node = Node(
+            name="Battle of Stalingrad",
+            node_type=NodeType.BATTLE,
+            description="Major battle during World War II",
+            date_range=DateRange(start=datetime(1942, 8, 23), end=datetime(1943, 2, 2)),
+        )
+
+        # Create third node - a person who participated in the battle
+        person_node = Node(
+            name="Marshal Zhukov",
+            node_type=NodeType.ENTITY,
+            description="Soviet military commander",
+        )
+
+        # Create nodes in the database
+        created_event = await node_db.create_node(event_node)
+        created_battle = await node_db.create_node(battle_node)
+        created_person = await node_db.create_node(person_node)
+
+        # Get UUIDs for relationships
+        event_uuid = created_event.uuid
+        battle_uuid = created_battle.uuid
+        person_uuid = created_person.uuid
+
+        # Create relationships
+        # Battle is part of the Event
+        node_db.create_relationship(battle_uuid, event_uuid, RelationshipType.PART_OF)
+
+        # Person participated in the Battle
+        node_db.create_relationship(person_uuid, battle_uuid, RelationshipType.PARTICIPATED_IN)
+
+        try:
+            # Query for relationships using the nodeRelationships query
+            query = """
+            query GetNodeRelationships($uuid: String!, $limit: Int!) {
+                nodeRelationships(uuid: $uuid, limit: $limit) {
+                    sourceNodeUUID
+                    targetNodeUUID
+                    relationshipType
+                }
+            }
+            """
+
+            # Test relationships for the battle node (should have 2 relationships)
+            result = await schema.execute(
+                query,
+                variable_values={"uuid": battle_uuid, "limit": 10},
+                context_value={"db": neo4j_db},
+            )
+
+            # Check for errors
+            assert result.errors is None, f"GraphQL errors: {result.errors}"
+
+            # Verify relationships
+            relationships = result.data["nodeRelationships"]
+            assert len(relationships) == 2
+
+            # Check for both relationships
+            battle_event_rel = next(
+                (
+                    r
+                    for r in relationships
+                    if r["sourceNodeUUID"] == battle_uuid and r["targetNodeUUID"] == event_uuid
+                ),
+                None,
+            )
+            assert battle_event_rel is not None
+            assert battle_event_rel["relationshipType"] == RelationshipType.PART_OF.value
+
+            person_battle_rel = next(
+                (
+                    r
+                    for r in relationships
+                    if r["sourceNodeUUID"] == person_uuid and r["targetNodeUUID"] == battle_uuid
+                ),
+                None,
+            )
+            assert person_battle_rel is not None
+            assert person_battle_rel["relationshipType"] == RelationshipType.PARTICIPATED_IN.value
+
+            # Test with a limit
+            limited_result = await schema.execute(
+                query,
+                variable_values={"uuid": battle_uuid, "limit": 1},
+                context_value={"db": neo4j_db},
+            )
+
+            assert limited_result.errors is None
+            limited_relationships = limited_result.data["nodeRelationships"]
+            assert len(limited_relationships) == 1
+
+        finally:
+            # Clean up - delete nodes in reverse order to avoid constraint issues
+            node_db.delete_node(person_uuid)
+            node_db.delete_node(battle_uuid)
+            node_db.delete_node(event_uuid)

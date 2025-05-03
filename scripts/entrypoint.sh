@@ -26,7 +26,7 @@ RELOAD=${FASTAPI_RELOAD:-false}
 # Launch the application based on the environment
 if [ "${ENV}" = "development" ] || [ "${ENV}" = "local" ]; then
     echo "Starting in development mode with hot reload"
-    exec uvicorn src.chronicler_backend.main:app --host ${HOST} --port ${PORT} --reload ${RELOAD}
+    exec uvicorn src.chronicler_backend.main:app --host ${HOST} --port ${PORT} --reload 
 else
     echo "Starting in production mode with ${WORKERS} workers"
     exec gunicorn src.chronicler_backend.main:app -w ${WORKERS} -k uvicorn.workers.UvicornWorker \

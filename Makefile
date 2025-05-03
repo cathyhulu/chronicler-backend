@@ -1,7 +1,7 @@
 .PHONY: clean docker-up docker-down docker-clean docker-deep-clean docker-build docker-logs docker-status \
 		docker-shell docker-test docker-test-small docker-test-medium docker-test-large \
 		format isort black flake8 pylint neo4j-shell neo4j-test-shell scripts-executable \
-		podman-check download-model-local download-model-docker
+		podman-check download-model-local download-model-docker neo4j-reset
 
 SOURCE_DIR=./src
 SOURCE_PATH=./src/chronicler-backend
@@ -141,12 +141,6 @@ ifeq "$(DOCKER_CMD)" "podman"
 	fi
 endif
 
-# For running just Neo4j without the full stack
-neo4j-only: podman-check
-	$(COMPOSE_CMD) up -d neo4j neo4j-test
-	@echo "Neo4j services started"
-	@echo "Neo4j Browser available at: http://localhost:7474"
-
 # Start all services with Docker Compose
 docker-up: podman-check
 	$(COMPOSE_CMD) up -d
@@ -203,6 +197,24 @@ docker-status: podman-check
 docker-shell: podman-check
 	$(DOCKER_CMD) exec -it chronicler-backend bash
 
+# Check Docker image sizes
+docker-size: podman-check
+	@echo "Checking Docker image sizes..."
+	@echo "--------------------------------"
+	@$(DOCKER_CMD) images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep -E 'chronicler|REPOSITORY'
+	@echo "--------------------------------"
+	@echo "Total disk space used by Docker:"
+	@$(DOCKER_CMD) system df
+
+# ++++++++++++++++++++++++
+# Database Management
+# ++++++++++++++++++++++++
+# For running just Neo4j without the full stack
+neo4j-only: podman-check
+	$(COMPOSE_CMD) up -d neo4j neo4j-test
+	@echo "Neo4j services started"
+	@echo "Neo4j Browser available at: http://localhost:7474"
+
 # Connect to Neo4j shell
 neo4j-shell: podman-check
 	$(DOCKER_CMD) exec -it chronicler-neo4j cypher-shell \
@@ -213,14 +225,20 @@ neo4j-test-shell: podman-check
 	$(DOCKER_CMD) exec -it chronicler-neo4j-test cypher-shell \
 	-u $(NEO4J_TEST_USER) -p $(NEO4J_TEST_PASSWORD)
 
-# Check Docker image sizes
-docker-size: podman-check
-	@echo "Checking Docker image sizes..."
-	@echo "--------------------------------"
-	@$(DOCKER_CMD) images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep -E 'chronicler|REPOSITORY'
-	@echo "--------------------------------"
-	@echo "Total disk space used by Docker:"
-	@$(DOCKER_CMD) system df
+# Reset Neo4j development database by removing volume and restarting container
+neo4j-reset: podman-check
+	@echo "WARNING: This will delete all Neo4j development data!"
+	@echo "This operation cannot be undone."
+	@read -p "Are you sure you want to continue? [y/N] " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		echo "Stopping Neo4j container..."; \
+		$(COMPOSE_CMD) stop neo4j; \
+		echo "Removing Neo4j volume..."; \
+		$(DOCKER_CMD) volume rm chronicler-backend_neo4j_data || true; \
+		echo "Dev database deleted"; \
+	else \
+		echo "Database reset cancelled."; \
+	fi
 
 
 # +++++++ +++++++ +++++++

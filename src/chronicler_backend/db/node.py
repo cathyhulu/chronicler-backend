@@ -520,7 +520,16 @@ class NodeDatabase:
                         )
                         logger.error(error_msg)
                         raise ValueError(error_msg)
-                logger.info("Vector index already exists with correct dimensions")
+                else:
+                    error_msg = (
+                        "Vector index exists but dimensions not found in indexConfig. "
+                        "Consider redeploying your database."
+                    )
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
+                logger.info(
+                    f"Vector index already exists with correct dimensions: {VECTOR_DIMENSION}"
+                )
                 return True
 
             # Create vector index with IF NOT EXISTS to make it idempotent
@@ -648,6 +657,8 @@ class NodeDatabase:
         node_uuid: str,
         relationship_type: Optional[RelationshipType] = None,
         direction: str = "ANY",
+        limit: int = 10,
+        offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """Get all relationships for a node, optionally filtered by type and direction.
 
@@ -655,6 +666,8 @@ class NodeDatabase:
             node_uuid: UUID of the node
             relationship_type: Optional filter for relationship type
             direction: Direction of relationship: "OUTGOING", "INCOMING", or "ANY" (default)
+            limit: Maximum number of results
+            offset: Offset for pagination
 
         Returns:
             List[Dict]: List of relationships with connected node information
@@ -669,7 +682,7 @@ class NodeDatabase:
 
         # Set up relationship type filter
         rel_type_filter = ""
-        params = {"node_uuid": node_uuid}
+        params = {"node_uuid": node_uuid, "limit": limit, "offset": offset}
 
         if relationship_type:
             rel_type_filter = f":`{relationship_type.value}`"
@@ -682,6 +695,8 @@ class NodeDatabase:
                other.name as other_node_name,
                other.node_type as other_node_type,
                CASE WHEN startNode(r) = n THEN 'OUTGOING' ELSE 'INCOMING' END as direction
+        SKIP $offset
+        LIMIT $limit
         """
         try:
             return self.db.run_query(query, params)
