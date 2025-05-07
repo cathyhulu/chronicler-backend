@@ -71,8 +71,6 @@ RUN chmod +x /app/scripts/entrypoint.sh
 # Reduce image size by cleaning up
 RUN find /app -name "*.pyc" -delete && \
     find /app -name "__pycache__" -delete && \
-    find /app/.venv -name "*.dist-info" -type d -exec rm -rf {} \; 2>/dev/null || true && \
-    find /app/.venv -name "tests" -type d -exec rm -rf {} \; 2>/dev/null || true && \
     find /app/.venv -name "doc" -type d -exec rm -rf {} \; 2>/dev/null || true
 
 # Expose port
