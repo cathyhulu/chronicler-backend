@@ -70,6 +70,8 @@ services:
       - ENV=${ENV:-development}
     volumes:
       - .:/app
+      - /app/.git # prevent mounting .git directory
+      - /app/.venv # prevent mounting .venv directory
       - api_packages:/app/.venv
       - model_weights:/app/model_weights
     depends_on:

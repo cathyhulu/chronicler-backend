@@ -504,29 +504,41 @@ class NodeDatabase:
             """
             result = self.db.run_query(check_query)
 
-            # If results are returned, the index exists
-            if result and len(result) > 0:
-                # Check dimensions of existing index
+            # Case 1: No index exists - we'll create a new one
+            if not result or len(result) == 0:
+                logger.info("No vector index found, creating a new one")
+
+            # Case 2: Index exists but missing dimensions - drop and recreate
+            elif (
+                "indexConfig" not in result[0]
+                or "vector.dimensions" not in result[0]["indexConfig"]
+            ):
                 existing_index = result[0]
-                if (
-                    "indexConfig" in existing_index
-                    and "vector.dimensions" in existing_index["indexConfig"]
-                ):
-                    existing_dimensions = existing_index["indexConfig"]["vector.dimensions"]
-                    if existing_dimensions != VECTOR_DIMENSION:
-                        error_msg = (
-                            f"Vector index dimension mismatch: Expected {VECTOR_DIMENSION}"
-                            f" but found {existing_dimensions}. Consider redeploying your database."
-                        )
-                        logger.error(error_msg)
-                        raise ValueError(error_msg)
-                else:
-                    error_msg = (
-                        "Vector index exists but dimensions not found in indexConfig. "
-                        "Consider redeploying your database."
-                    )
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
+                warning_msg = (
+                    "Vector index exists but dimensions not found in indexConfig."
+                    " Force dropping and recreating the index."
+                    f" Existing index details: {existing_index}"
+                )
+                logger.warning(warning_msg)
+
+                # Drop the malformed index
+                drop_query = "DROP INDEX node_vector_index"
+                self.db.run_query(drop_query)
+                logger.info("Dropped malformed vector index")
+
+            # Case 3: Index exists with incorrect dimensions - raise error
+            elif result[0]["indexConfig"]["vector.dimensions"] != VECTOR_DIMENSION:
+                existing_index = result[0]
+                existing_dimensions = existing_index["indexConfig"]["vector.dimensions"]
+                error_msg = (
+                    f"Vector index dimension mismatch: Expected {VECTOR_DIMENSION} "
+                    f"but found {existing_dimensions}. Consider redeploying your database."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            # Case 4: Index exists with correct dimensions - nothing to do
+            else:
                 logger.info(
                     f"Vector index already exists with correct dimensions: {VECTOR_DIMENSION}"
                 )
