@@ -115,7 +115,7 @@ class Query:
             info: GraphQL resolver info with context
 
         Returns:
-            int: Maximum number of characters before truncation
+            int: Approximate number of words before truncation
         """
         return TRUNCATE_DESCRIPTION_LENGTH
 

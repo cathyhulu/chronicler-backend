@@ -8,10 +8,7 @@ from chronicler_backend.db.neo4j import Neo4jDatabase
 from chronicler_backend.embeddings.api import get_model_manager
 from chronicler_backend.embeddings.manager import ModelManager
 from chronicler_backend.models.node import DateRange, Node, NodeType, RelationshipType
-from chronicler_backend.utils.constants import (
-    TRUNCATE_DESCRIPTION_LENGTH,
-    VECTOR_DIMENSION,
-)
+from chronicler_backend.utils.constants import VECTOR_DIMENSION
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +92,7 @@ class NodeDatabase:
             # Format date range as string for embedding
             date_str = self._format_date_range_as_string(node.date_range)
 
-            # Truncate description if too long
-            if node.description and len(node.description.split()) > TRUNCATE_DESCRIPTION_LENGTH:
-                node.description = " ".join(node.description.split()[:TRUNCATE_DESCRIPTION_LENGTH])
-
-            # Prepare text for embedding
+            # Prepare text for embedding - token-based truncation is handled in prepare_node_text
             embedding_text = model_manager.prepare_node_text(
                 name=node.name,
                 node_type=node.node_type.name,
