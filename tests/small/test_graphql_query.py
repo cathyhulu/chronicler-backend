@@ -370,3 +370,59 @@ def test_date_range_from_model():
 
     # Test with None input
     assert DateRange.from_model(None) is None
+
+
+async def test_max_description_length(mocker):
+    """Test the max_description_length resolver."""
+    # Mock the get_model_manager function
+    mock_model_manager = mocker.AsyncMock()
+    mock_model = mocker.MagicMock()
+
+    # Configure the mock model to return a reasonable max_seq_length
+    # For example, all-MiniLM-L6-v2 has max_seq_length of 256
+    mock_model.max_seq_length = 256
+
+    # Set up the async mock to return the mock model when awaited
+    mock_model_manager.get_model = mocker.AsyncMock(return_value=mock_model)
+
+    # Mock the get_model_manager to return our mock
+    mocker.patch(
+        "chronicler_backend.graphql.query.get_model_manager", return_value=mock_model_manager
+    )
+
+    # Create an instance of the Query class and call the resolver
+    query = Query()
+    result = await query.max_description_length(MockInfo({}))
+
+    # Verify model manager was used correctly
+    mock_model_manager.get_model.assert_called_once()
+
+    # Calculate the expected result based on our mocked model
+    # max_tokens = 256
+    # reserved_tokens = 25
+    # available_tokens = 231
+    # tokens_per_word = 1.4
+    # approximate_words = 231 / 1.4 = 165 (rounded down)
+    # rounded_words = 160 (rounded down to nearest 10)
+    expected_result = 160
+
+    # Check that the result is reasonable
+    assert result == expected_result, f"Expected {expected_result}, got {result}"
+
+
+async def test_max_description_length_fallback(mocker):
+    """Test max_description_length falls back to constant when there's an error."""
+    # Mock get_model_manager to raise an exception
+    mock_error = Exception("Test error")
+    mocker.patch("chronicler_backend.graphql.query.get_model_manager", side_effect=mock_error)
+
+    # Create an instance of the Query class and call the resolver
+    query = Query()
+    result = await query.max_description_length(MockInfo({}))
+
+    # Verify it falls back to the constant value
+    from chronicler_backend.graphql.query import DEFAULT_DESCRIPTION_LENGTH
+
+    assert (
+        result == DEFAULT_DESCRIPTION_LENGTH
+    ), f"Expected fallback to {DEFAULT_DESCRIPTION_LENGTH}, got {result}"
