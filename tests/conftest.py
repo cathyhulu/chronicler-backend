@@ -58,6 +58,11 @@ def neo4j_db(neo4j_uri: str, neo4j_auth: tuple[str, str]) -> Generator[Neo4jData
     try:
         # Test the connection and clear database before tests
         with db.get_session() as session:
+            # Drop all indexes first
+            session.run("SHOW VECTOR INDEXES").data()
+            session.run("DROP INDEX node_vector_index IF EXISTS")
+            session.run("DROP INDEX date_range_index IF EXISTS")
+            # Clear all nodes and relationships
             session.run("MATCH (n) DETACH DELETE n")
             logger.debug("Connected to Neo4j test database and cleared data")
     except ServiceUnavailable as e:

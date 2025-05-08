@@ -16,7 +16,6 @@ from chronicler_backend.utils.constants import (
     DEFAULT_MODEL_NAME,
     DEFAULT_QUANTIZATION,
     DEFAULT_QUANTIZED_DIR,
-    TRUNCATE_DESCRIPTION_LENGTH,
 )
 from chronicler_backend.utils.logging import get_logger
 
@@ -128,7 +127,7 @@ class ModelManager(metaclass=SingletonMeta):
     ) -> str:
         """
         Prepare text for embedding by concatenating node properties.
-        Truncates the description to avoid exceeding token limits.
+        Truncates the description based on token count to avoid exceeding token limits.
 
         Args:
             name: Node name
@@ -139,17 +138,54 @@ class ModelManager(metaclass=SingletonMeta):
         Returns:
             Concatenated text ready for embedding
         """
-        # Simple truncation strategy - could be improved with smarter tokenization
+        # Get the model and its tokenizer
+        model = self.get_model()
+        tokenizer = model.tokenizer
+        max_seq_length = model.max_seq_length
+
+        # Concatenate the core metadata that must be included
         main_text = f"{name} {node_type} {date_range}".strip()
-        remaining_length = TRUNCATE_DESCRIPTION_LENGTH - len(main_text.split())
 
-        # Simple word-based truncation (approximation)
-        if description:
-            desc_words = description.split()
-            if len(desc_words) > remaining_length:
-                description = " ".join(desc_words[:remaining_length])
+        # First check token count of main text
+        main_tokens = tokenizer(main_text, return_attention_mask=False, return_token_type_ids=False)
+        main_token_count = len(main_tokens["input_ids"])
 
-        return f"{main_text} {description}".strip()
+        # Calculate remaining token capacity for description
+        remaining_tokens = (
+            max_seq_length - main_token_count - 3
+        )  # Reserve a few tokens for padding/special tokens
+
+        # Truncate description if needed based on token count
+        truncated_description = description
+        if description and remaining_tokens > 0:
+            # Tokenize description without truncation
+            desc_tokens = tokenizer(
+                description, return_attention_mask=False, return_token_type_ids=False
+            )
+            desc_token_count = len(desc_tokens["input_ids"])
+
+            # If description exceeds remaining token capacity, truncate it
+            if desc_token_count > remaining_tokens:
+                logger.info(
+                    f"Truncating description from {desc_token_count} to {remaining_tokens} tokens"
+                )
+                # Simple truncation by percentage - a more sophisticated approach would be better
+                truncation_ratio = remaining_tokens / desc_token_count
+                truncation_word_count = int(len(description.split()) * truncation_ratio)
+                truncated_description = " ".join(description.split()[:truncation_word_count])
+
+                # Verify we didn't exceed token count after truncation
+                verification_tokens = tokenizer(
+                    truncated_description, return_attention_mask=False, return_token_type_ids=False
+                )
+                if len(verification_tokens["input_ids"]) > remaining_tokens:
+                    # If still too long, truncate more aggressively
+                    truncated_description = " ".join(
+                        truncated_description.split()[: truncation_word_count - 10]
+                    )
+
+        # Return the combined text
+        return f"{main_text} {truncated_description}".strip()
 
 
 def export_quantized_model(

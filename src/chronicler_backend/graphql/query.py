@@ -12,10 +12,11 @@ from chronicler_backend.embeddings.api import get_model_manager
 from chronicler_backend.models.node import DateRange as ModelDateRange
 from chronicler_backend.models.node import NodeType as ModelNodeType
 from chronicler_backend.models.node import RelationshipType as ModelRelationshipType
-from chronicler_backend.utils.constants import TRUNCATE_DESCRIPTION_LENGTH
 from chronicler_backend.utils.logging import get_logger
 
 logger = get_logger(__name__)
+
+DEFAULT_DESCRIPTION_LENGTH = 200  # Default description length in words
 
 # Auto-generate NodeType enum for GraphQL from the model definition
 # Create the enum dynamically based on the model's NodeType
@@ -104,20 +105,54 @@ class Query:
 
     @strawberry.field(
         description=(
-            "Get the maximum description length (in characters)"
+            "Get the maximum description length (in words)"
             " before truncation for vector embeddings"
         )
     )
-    def max_description_length(self, info: Info) -> int:
+    async def max_description_length(self, info: Info) -> int:
         """Get the maximum description length before truncation for vector embeddings.
+        This calculates a usable word count based on the model's actual token limit.
 
         Args:
             info: GraphQL resolver info with context
 
         Returns:
-            int: Maximum number of characters before truncation
+            int: Approximate number of words before truncation, rounded down to nearest 10
         """
-        return TRUNCATE_DESCRIPTION_LENGTH
+        try:
+            # Get model manager to access the model
+            model_manager = await get_model_manager()
+            # Get the model (need to await this since it's an async method)
+            model = await model_manager.get_model()
+
+            # Get the model's max token length
+            max_tokens = model.max_seq_length
+
+            # Reserve tokens for metadata (name, type, date) and special tokens
+            # This is an approximation - typical metadata might use 10-20 tokens
+            reserved_tokens = 25
+
+            # Available tokens for description
+            available_tokens = max(0, max_tokens - reserved_tokens)
+
+            # Convert tokens to approximate word count
+            # Most tokenizers produce ~1.3-1.5 tokens per word on average for English
+            tokens_per_word = 1.4
+            approximate_words = int(available_tokens / tokens_per_word)
+
+            # Round down to nearest 10 for a cleaner number
+            rounded_words = (approximate_words // 10) * 10
+
+            logger.info(
+                f"Calculated max description length: {rounded_words}"
+                " words from {available_tokens} tokens"
+            )
+            return rounded_words
+
+        except Exception as e:
+            # If any error occurs, fall back to the constant value
+            logger.error(f"Error calculating max description length: {e}")
+            return DEFAULT_DESCRIPTION_LENGTH  # Fallback to a default value
 
     @strawberry.field(description="Retrieve a single node by its unique identifier")
     def node(

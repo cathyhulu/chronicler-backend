@@ -8,10 +8,7 @@ from chronicler_backend.db.neo4j import Neo4jDatabase
 from chronicler_backend.embeddings.api import get_model_manager
 from chronicler_backend.embeddings.manager import ModelManager
 from chronicler_backend.models.node import DateRange, Node, NodeType, RelationshipType
-from chronicler_backend.utils.constants import (
-    TRUNCATE_DESCRIPTION_LENGTH,
-    VECTOR_DIMENSION,
-)
+from chronicler_backend.utils.constants import VECTOR_DIMENSION
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +92,7 @@ class NodeDatabase:
             # Format date range as string for embedding
             date_str = self._format_date_range_as_string(node.date_range)
 
-            # Truncate description if too long
-            if node.description and len(node.description.split()) > TRUNCATE_DESCRIPTION_LENGTH:
-                node.description = " ".join(node.description.split()[:TRUNCATE_DESCRIPTION_LENGTH])
-
-            # Prepare text for embedding
+            # Prepare text for embedding - token-based truncation is handled in prepare_node_text
             embedding_text = model_manager.prepare_node_text(
                 name=node.name,
                 node_type=node.node_type.name,
@@ -504,29 +497,41 @@ class NodeDatabase:
             """
             result = self.db.run_query(check_query)
 
-            # If results are returned, the index exists
-            if result and len(result) > 0:
-                # Check dimensions of existing index
+            # Case 1: No index exists - we'll create a new one
+            if not result or len(result) == 0:
+                logger.info("No vector index found, creating a new one")
+
+            # Case 2: Index exists but missing dimensions - drop and recreate
+            elif (
+                "indexConfig" not in result[0]
+                or "vector.dimensions" not in result[0]["indexConfig"]
+            ):
                 existing_index = result[0]
-                if (
-                    "indexConfig" in existing_index
-                    and "vector.dimensions" in existing_index["indexConfig"]
-                ):
-                    existing_dimensions = existing_index["indexConfig"]["vector.dimensions"]
-                    if existing_dimensions != VECTOR_DIMENSION:
-                        error_msg = (
-                            f"Vector index dimension mismatch: Expected {VECTOR_DIMENSION}"
-                            f" but found {existing_dimensions}. Consider redeploying your database."
-                        )
-                        logger.error(error_msg)
-                        raise ValueError(error_msg)
-                else:
-                    error_msg = (
-                        "Vector index exists but dimensions not found in indexConfig. "
-                        "Consider redeploying your database."
-                    )
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
+                warning_msg = (
+                    "Vector index exists but dimensions not found in indexConfig."
+                    " Force dropping and recreating the index."
+                    f" Existing index details: {existing_index}"
+                )
+                logger.warning(warning_msg)
+
+                # Drop the malformed index
+                drop_query = "DROP INDEX node_vector_index"
+                self.db.run_query(drop_query)
+                logger.info("Dropped malformed vector index")
+
+            # Case 3: Index exists with incorrect dimensions - raise error
+            elif result[0]["indexConfig"]["vector.dimensions"] != VECTOR_DIMENSION:
+                existing_index = result[0]
+                existing_dimensions = existing_index["indexConfig"]["vector.dimensions"]
+                error_msg = (
+                    f"Vector index dimension mismatch: Expected {VECTOR_DIMENSION} "
+                    f"but found {existing_dimensions}. Consider redeploying your database."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            # Case 4: Index exists with correct dimensions - nothing to do
+            else:
                 logger.info(
                     f"Vector index already exists with correct dimensions: {VECTOR_DIMENSION}"
                 )
