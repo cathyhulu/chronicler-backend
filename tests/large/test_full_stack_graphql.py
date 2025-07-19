@@ -44,8 +44,11 @@ def test_create_node_via_http(test_client, cleanup_test_nodes):
     assert created_node["name"] == node_data["name"]
     assert created_node["nodeType"] == node_data["nodeType"]
     assert created_node["description"] == node_data["description"]
-    assert created_node["dateRange"]["start"] == node_data["dateRange"]["start"]
-    assert created_node["dateRange"]["end"] == node_data["dateRange"]["end"]
+    # Handle timezone format differences (API returns +00:00, test sends Z)
+    assert (
+        created_node["dateRange"]["start"].replace("+00:00", "Z") == node_data["dateRange"]["start"]
+    )
+    assert created_node["dateRange"]["end"].replace("+00:00", "Z") == node_data["dateRange"]["end"]
 
 
 def test_query_node_via_http(test_client, cleanup_test_nodes):
@@ -53,7 +56,7 @@ def test_query_node_via_http(test_client, cleanup_test_nodes):
     # First create a test node
     node_data = {
         "name": "Test Person",
-        "nodeType": "PERSON",
+        "nodeType": "ENTITY",
         "description": "A test person for querying",
         "dateRange": {"start": "1920-01-01T00:00:00Z", "end": "1990-12-31T23:59:59Z"},
     }
