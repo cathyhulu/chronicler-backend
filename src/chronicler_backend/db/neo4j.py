@@ -61,9 +61,16 @@ def get_neo4j_db() -> Generator[Neo4jDatabase, None, None]:
     Returns:
         Neo4jDatabase: Database instance
     """
-    uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    user = os.getenv("NEO4J_USER", "neo4j")
-    password = os.getenv("NEO4J_PASSWORD", "chroniclerpass")
+    uri = os.getenv("NEO4J_URI")
+    user = os.getenv("NEO4J_USER")
+    password = os.getenv("NEO4J_PASSWORD")
+
+    if not uri:
+        raise ValueError("NEO4J_URI environment variable is required")
+    if not user:
+        raise ValueError("NEO4J_USER environment variable is required")
+    if not password:
+        raise ValueError("NEO4J_PASSWORD environment variable is required")
 
     db = Neo4jDatabase(uri=uri, user=user, password=password)
     try:
