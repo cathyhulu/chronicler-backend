@@ -6,7 +6,6 @@ providing efficient embedding generation with multi-worker support.
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import BackgroundTasks, Depends
 from sentence_transformers import (
     SentenceTransformer,
     export_dynamic_quantized_onnx_model,
@@ -234,46 +233,3 @@ def export_quantized_model(
         logger.error(f"Error exporting quantized model: {e}")
         # Make sure to return the original model path for fallback
         return output_dir
-
-
-# FastAPI dependency to get model manager
-async def get_model_manager() -> ModelManager:
-    """
-    FastAPI dependency for getting the ModelManager instance.
-
-    Returns:
-        ModelManager: Singleton instance of the ModelManager
-    """
-    return ModelManager()
-
-
-# FastAPI background task for loading the model
-def load_model_in_background(
-    background_tasks: BackgroundTasks,
-    model_manager: ModelManager = Depends(get_model_manager),
-    model_path: Optional[str] = None,
-    quantized: bool = True,
-    backend: str = "onnx",
-) -> None:
-    """
-    Schedule model loading as a background task.
-
-    Args:
-        background_tasks: FastAPI BackgroundTasks object
-        model_manager: ModelManager instance
-        model_path: Path to the model
-        quantized: Whether to use a quantized model
-        backend: Backend to use
-    """
-    background_tasks.add_task(
-        model_manager.load_model, model_path=model_path, quantized=quantized, backend=backend
-    )
-
-
-# Function to load model during app startup
-def load_model_on_startup() -> None:
-    """
-    Function to be called during app startup to preload the model.
-    """
-    model_manager = ModelManager()
-    model_manager.load_model()
