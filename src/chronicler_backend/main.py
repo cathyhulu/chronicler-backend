@@ -22,18 +22,11 @@ async def lifespan(app: FastAPI):
     # Startup: Add any initialization here
     logger.info("Starting up Chronicler Backend...")
     # Store the database connection for later cleanup
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USER")
-    password = os.getenv("NEO4J_PASSWORD")
-
-    if not uri:
-        raise ValueError("NEO4J_URI environment variable is required")
-    if not user:
-        raise ValueError("NEO4J_USER environment variable is required")
-    if not password:
-        raise ValueError("NEO4J_PASSWORD environment variable is required")
-
-    app.state.db = Neo4jDatabase(uri=uri, user=user, password=password)
+    app.state.db = Neo4jDatabase(
+        uri=os.getenv("NEO4J_URI", "bolt://neo4j:7687"),
+        user=os.getenv("NEO4J_USER", "neo4j"),
+        password=os.getenv("NEO4J_PASSWORD", "chroniclerpass"),
+    )
 
     # Initialize node database with necessary indexes
     logger.info("Setting up database indexes...")
@@ -89,31 +82,15 @@ app.add_middleware(
 
 
 # Create GraphQL router with context that includes database
-def get_context(request):
-    """Get GraphQL context with database connection."""
-    # Safely get database connection from app state
-    if hasattr(request.app.state, "db"):
-        return {"db": request.app.state.db}
-    else:
-        # Fallback: create a new connection if app.state.db doesn't exist yet
-        # This can happen during testing or early initialization
-        uri = os.getenv("NEO4J_URI")
-        user = os.getenv("NEO4J_USER")
-        password = os.getenv("NEO4J_PASSWORD")
-
-        if not uri:
-            raise ValueError("NEO4J_URI environment variable is required")
-        if not user:
-            raise ValueError("NEO4J_USER environment variable is required")
-        if not password:
-            raise ValueError("NEO4J_PASSWORD environment variable is required")
-
-        return {"db": Neo4jDatabase(uri=uri, user=user, password=password)}
-
-
 graphql_app = GraphQLRouter(
     schema,
-    context_getter=get_context,
+    context_getter=lambda: {
+        "db": Neo4jDatabase(
+            uri=os.getenv("NEO4J_URI", "bolt://neo4j:7687"),
+            user=os.getenv("NEO4J_USER", "neo4j"),
+            password=os.getenv("NEO4J_PASSWORD", "chroniclerpass"),
+        )
+    },
 )
 
 # Add GraphQL routes
