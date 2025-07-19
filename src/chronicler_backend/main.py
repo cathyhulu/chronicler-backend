@@ -83,13 +83,7 @@ app.add_middleware(
 # Create GraphQL router with context that includes database
 graphql_app = GraphQLRouter(
     schema,
-    context_getter=lambda: {
-        "db": Neo4jDatabase(
-            uri=os.getenv("NEO4J_URI", "bolt://neo4j:7687"),
-            user=os.getenv("NEO4J_USER", "neo4j"),
-            password=os.getenv("NEO4J_PASSWORD", "chroniclerpass"),
-        )
-    },
+    context_getter=lambda request: {"db": request.app.state.db},
 )
 
 # Add GraphQL routes
