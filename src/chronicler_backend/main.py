@@ -80,6 +80,7 @@ app.add_middleware(
     allow_headers=cors_headers,
 )
 
+
 # Create GraphQL router with context that includes database
 graphql_app = GraphQLRouter(
     schema,
